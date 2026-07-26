@@ -31,6 +31,14 @@ class FloorManager:
         if not cast:
             raise ValueError("A live scene requires at least one selected AI character")
 
+        if len(cast) == 1:
+            selected = cast[0]
+            return FloorDecision(
+                character_key=selected.key,
+                score=100.0,
+                reason="single_agent_lock",
+            )
+
         words = {word.strip(".,!?;:").casefold() for word in user_text.split()}
         contradiction = len(words & self.contradiction_markers)
         urgency = len(words & self.urgency_markers)

@@ -178,6 +178,34 @@ def test_one_on_one_prompt_selects_only_named_counterpart(client):
     assert response.status_code == 201, response.text
     selected = [item for item in response.json()["manifest"]["ai_characters"] if item["selected"]]
     assert len(selected) == 1
+def test_one_agent_scene_keeps_the_same_speaker_across_turns(client):
+    scene = client.post(
+        "/api/worlds/draft",
+        json={
+            "prompt": "I want to interview Aamir Khan tomorrow about a celebratory movie launch.",
+            "locale": "en-IN",
+        },
+    ).json()
+    selected = [item for item in scene["manifest"]["ai_characters"] if item["selected"]]
+    assert len(selected) == 1
+    assert selected[0]["identity_kind"] == "public_figure"
+    scene_id = scene["id"]
+    confirmed = client.post(
+        f"/api/worlds/{scene_id}/confirm",
+        json={"expected_version": scene["active_manifest_version"]},
+    )
+    assert confirmed.status_code == 202, confirmed.text
+    _wait_until_ready(client, scene_id)
+    assert client.post(f"/api/worlds/{scene_id}/enter").status_code == 200
+
+    first = client.post(f"/api/worlds/{scene_id}/turns", json={"text": "Congratulations on the launch."}).json()
+    second = client.post(f"/api/worlds/{scene_id}/turns", json={"text": "What should fans notice first?"}).json()
+    first_agent = [turn for turn in first["turns"] if turn["speaker_type"] == "agent"][-1]
+    second_agent = [turn for turn in second["turns"] if turn["speaker_type"] == "agent"][-1]
+    assert first_agent["speaker_key"] == selected[0]["key"]
+    assert second_agent["speaker_key"] == selected[0]["key"]
+    assert second_agent["turn_data"]["floor_reason"] == "single_agent_lock"
+
 def test_public_figure_scene_is_labelled_and_forces_an_original_voice(client):
     response = client.post(
         "/api/worlds/draft",

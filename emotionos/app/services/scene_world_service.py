@@ -947,6 +947,32 @@ class SceneWorldService:
 
     @staticmethod
     def _normalize_cast_for_prompt(prompt: str, manifest: SceneManifest) -> SceneManifest:
+        known_public_figures = {
+            "aamir khan",
+            "amir khan",
+            "shah rukh khan",
+            "shahrukh khan",
+            "srk",
+            "salman khan",
+            "amitabh bachchan",
+            "narendra modi",
+        }
+        prompt_text = prompt.casefold()
+        for character in manifest.ai_characters:
+            identity_text = " ".join([character.name, character.identity, character.voice.requested_identity]).casefold()
+            if any(name in identity_text or name in prompt_text for name in known_public_figures):
+                character.identity_kind = "public_figure"
+                character.identity = character.identity or character.name
+                character.portrayal_notice = (
+                    "Public-information simulation with a distinct synthetic voice. "
+                    "Not affiliated with or endorsed by the real person."
+                )
+                character.voice.identity_mode = "distinct_synthetic"
+                character.voice.requested_identity = ""
+                character.voice.consent_required = False
+                character.voice.consent_confirmed = False
+
+        manifest = SceneManifest.model_validate(manifest.model_dump(mode="json"))
         one_on_one = re.search(
             r"\b(talk to|speak to|chat with|talk with|meet with|interview|conversation with)\b",
             prompt,
