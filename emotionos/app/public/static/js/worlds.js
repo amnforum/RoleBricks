@@ -23,7 +23,8 @@ const worldState = {
 
 const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
 const featuredSceneIds = ['a4d3a306-7624-458d-b8dd-4ec1ad70a281'];
-const voiceSilenceMs = 1800;
+const voiceSilenceMs = 1300;
+const voiceFastSilenceMs = 760;
 const voiceNoiseTokens = new Set(['h', 'hi', 'hii', 'hiii', 'hello', 'uh', 'um', 'umm', 'mmm', 'a', 'aa', 'aaa']);
 
 const worldViews = {
@@ -70,6 +71,8 @@ function clearAutoListen() {
 
 function scheduleAutoListen() {
   clearAutoListen();
+  if (worldState.audio && 'speechSynthesis' in window && !speechSynthesis.speaking) worldState.audio = null;
+  if (worldState.audio?.ended) worldState.audio = null;
   if (!worldState.voiceMode || worldState.scene?.status !== 'live') return;
   if (worldState.recognition || worldState.recorder?.state === 'recording' || worldState.turnSubmitting || worldState.audio) return;
   worldState.autoListenTimer = window.setTimeout(() => {
@@ -962,6 +965,11 @@ function isMeaningfulVoiceText(text) {
   if (useful.length === 1 && useful[0].length >= 5) return true;
   return false;
 }
+function voiceSubmitDelay(text) {
+  const useful = normalizedVoiceTokens(text).filter((token) => !voiceNoiseTokens.has(token) && token.length > 1);
+  if (useful.length >= 4 || /[.?!?]$/.test(String(text || '').trim())) return voiceFastSilenceMs;
+  return voiceSilenceMs;
+}
 
 function clearNoiseTurnText(finalText, interimText) {
   if (isMeaningfulVoiceText(finalText)) return false;
@@ -981,7 +989,7 @@ function clearVoiceInputTimer() {
 
 function submitVoiceTextNow(text) {
   const cleanText = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!worldState.voiceMode || worldState.turnSubmitting || worldState.audio || !isMeaningfulVoiceText(cleanText)) return false;
+  if (!worldState.voiceMode || worldState.turnSubmitting || !isMeaningfulVoiceText(cleanText)) return false;
   const now = Date.now();
   if (worldState.lastVoiceSubmittedText === cleanText && now - worldState.lastVoiceSubmittedAt < 6000) return false;
   worldState.lastVoiceSubmittedText = cleanText;
@@ -1003,7 +1011,7 @@ function queueVoiceTextSubmit(text) {
   if (!isMeaningfulVoiceText(cleanText)) return;
   worldState.voiceInputTimer = window.setTimeout(() => {
     submitVoiceTextNow($('#turnText').value.trim() || cleanText);
-  }, voiceSilenceMs);
+  }, voiceSubmitDelay(cleanText));
 }
 function startAutoVoiceTurn() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1030,6 +1038,7 @@ function startAutoVoiceTurn() {
     .trim();
   const queueSubmit = () => {
     window.clearTimeout(submitTimer);
+    const delayText = currentVoiceText() || $('#turnText').value.trim();
     submitTimer = window.setTimeout(() => {
       const text = currentVoiceText() || $('#turnText').value.trim();
       if (!isMeaningfulVoiceText(text)) {
@@ -1038,7 +1047,7 @@ function startAutoVoiceTurn() {
       }
       shouldSubmit = true;
       submitVoiceTextNow(text);
-    }, voiceSilenceMs);
+    }, voiceSubmitDelay(delayText));
   };
   recognition.onresult = (event) => {
     interimText = '';
