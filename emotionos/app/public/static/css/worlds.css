@@ -257,9 +257,43 @@ body[data-page="worlds"] label > select {
 
 .recent-scene {
   min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0;
+  border: 1px solid #393939;
+  background: rgba(12, 13, 16, 0.72);
+}
+
+.recent-scene-main,
+.recent-scene-action {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+.recent-scene-main {
   display: block;
   padding: 11px 12px;
   text-align: left;
+}
+
+.recent-scene-action {
+  padding: 0 10px;
+  color: #d6d6d6;
+  font-size: 0.66rem;
+  letter-spacing: 0;
+}
+
+.recent-scene-action:hover,
+.recent-scene-main:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.recent-scene-action.danger-action {
+  border: 0;
+  color: #ff8b73;
 }
 
 .recent-scene strong,
@@ -1616,3 +1650,4 @@ body[data-page="worlds"] .page-shell {
   .transcript { padding: 16px 14px 18px; }
   .turn.is-user { width: 100%; }
 }
+

@@ -196,10 +196,14 @@ async function loadRecentScenes() {
     return;
   }
   list.innerHTML = scenes.map((scene) => `
-    <button class="recent-scene" type="button" data-load-scene="${scene.id}">
-      <strong>${escapeHtml(scene.manifest.title)}</strong>
-      <span>${escapeHtml(scene.status.replace('_', ' '))}</span>
-    </button>
+    <article class="recent-scene" data-scene-card="${scene.id}">
+      <button class="recent-scene-main" type="button" data-load-scene="${scene.id}" aria-label="Open ${escapeHtml(scene.manifest.title)}">
+        <strong>${escapeHtml(scene.manifest.title)}</strong>
+        <span>${escapeHtml(scene.status.replace('_', ' '))}</span>
+      </button>
+      <button class="recent-scene-action" type="button" data-load-scene="${scene.id}">Open</button>
+      <button class="recent-scene-action danger-action" type="button" data-delete-recent-scene="${scene.id}">Delete</button>
+    </article>
   `).join('');
   container.classList.remove('is-hidden');
 }
@@ -225,6 +229,16 @@ function forgetScene(sceneId) {
   localStorage.setItem(recentSceneStorageKey, JSON.stringify(next));
 }
 
+async function deleteRecentScene(sceneId) {
+  if (!sceneId || !confirm('Delete this scene and its generated audio? This cannot be undone.')) return;
+  try {
+    await api(`/api/worlds/${sceneId}`, { method: 'DELETE' });
+    forgetScene(sceneId);
+    if (worldState.scene?.id === sceneId) resetWorldComposer();
+    await loadRecentScenes();
+    toast('Scene deleted.');
+  } catch (error) { toast(error.message); }
+}
 async function loadWorldScene(sceneId) {
   const scene = await api(`/api/worlds/${sceneId}`);
   worldState.scene = scene;
@@ -1012,6 +1026,12 @@ function bindWorldEvents() {
   $('#deleteScene')?.addEventListener('click', deleteCurrentScene);
 
   document.addEventListener('click', (event) => {
+    const deleteRecentButton = event.target.closest('[data-delete-recent-scene]');
+    if (deleteRecentButton) {
+      deleteRecentScene(deleteRecentButton.dataset.deleteRecentScene);
+      return;
+    }
+
     const loadButton = event.target.closest('[data-load-scene]');
     if (loadButton) loadWorldScene(loadButton.dataset.loadScene).catch((error) => toast(error.message));
 
@@ -1038,3 +1058,4 @@ if (page === 'worlds') {
     setWorldView('describe');
   });
 }
+
