@@ -12,7 +12,9 @@ def test_api_error_response_shape(client):
 def test_health_and_ready(client):
     assert client.get("/health").json()["status"] == "ok"
     ready = client.get("/ready").json()
+    api_ready = client.get("/api/ready").json()
     assert ready["ready"] is True
+    assert api_ready == ready
     assert ready["provider"] == "mock-tts"
     assert ready["scene_compiler_ready"] is True
     assert ready["scene_research_ready"] is True
@@ -37,7 +39,7 @@ def test_root_renders_the_open_ended_scene_workflow(client):
 def test_legacy_voice_studio_is_not_shipped(client):
     assert client.get("/voice-studio").status_code == 404
     paths = client.get("/openapi.json").json()["paths"]
-    allowed = {"/health", "/ready", "/", "/admin", "/api/transcribe", "/api/admin/overview"}
+    allowed = {"/health", "/ready", "/api/ready", "/", "/admin", "/api/transcribe", "/api/admin/overview"}
     assert all(path.startswith("/api/worlds") or path in allowed for path in paths)
 
 

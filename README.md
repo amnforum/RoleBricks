@@ -15,7 +15,7 @@ Real public people are supported as clearly labelled public-information practice
 
 ## Runtime Architecture
 
-- FastAPI and Jinja UI
+- Shared static scene UI, FastAPI APIs, and a Jinja-only private admin view
 - Lakebase Postgres for operational scene state
 - Delta tables and AI Search for scoped character memory
 - Databricks Foundation Model APIs for scene compilation
@@ -84,6 +84,20 @@ databricks bundle summary -t dev
 
 Databricks App OAuth supplies workspace credentials automatically. Personal Databricks tokens do not belong in source files or App secrets.
 
+## Public Vercel Gateway
+
+The judge-facing UI can run on Vercel while the Databricks App stays private. Vercel serves `emotionos/app/public` and the server-only `api/gateway.js` function authenticates only allowlisted `/api` requests with a dedicated Databricks service principal.
+
+Required Vercel Production environment variables:
+
+- `DATABRICKS_HOST`: workspace URL, for example `https://dbc-...cloud.databricks.com`
+- `DATABRICKS_APP_URL`: deployed `https://...databricksapps.com` URL
+- `DATABRICKS_CLIENT_ID`: dedicated gateway service principal application ID
+- `DATABRICKS_CLIENT_SECRET`: its OAuth secret, stored as a sensitive Vercel variable
+
+Grant that service principal `CAN USE` on the Databricks App. Never expose these values through browser-prefixed variables or source files. The public gateway intentionally excludes `/admin`, suppresses the global scene list, applies bounded request limits, and caches only the short-lived OAuth access token. Recent scene IDs are kept in each browser so judges can resume their own scenes without seeing another visitor's list.
+
+After the Vercel production deployment is healthy, add `rolebricks.aman-chauhan.co.in` to that Vercel project. Because GoDaddy remains the DNS provider, add only the exact `rolebricks` CNAME target shown by Vercel; do not change the apex, `www`, mail, or nameserver records.
 ## Configuration
 
 - `.env.example`: local settings and provider keys
@@ -97,7 +111,8 @@ The production voice router selects exactly one provider before synthesis. It do
 
 ```powershell
 .\.venv\Scripts\python.exe -m compileall -q emotionos migrations tests
-node --check emotionos\app\static\js\worlds.js
+node --check emotionos\app\public\static\js\worlds.js
+npm run test:gateway
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 

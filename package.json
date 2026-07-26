@@ -1,0 +1,13 @@
+{
+  "name": "rolebricks-vercel-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node --check api/gateway.js",
+    "test:gateway": "node tests/vercel_gateway.test.mjs"
+  }
+}

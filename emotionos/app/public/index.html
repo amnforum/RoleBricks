@@ -1,10 +1,38 @@
-{% extends "base.html" %}
-{% block title %}RoleBricks | Living Scenes{% endblock %}
-{% block page_id %}worlds{% endblock %}
-{% block styles %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#060a12">
+  <link rel="icon" type="image/png" sizes="256x256" href="/static/images/rolebricks-favicon.png">
+  <link rel="apple-touch-icon" href="/static/images/rolebricks-favicon.png">
+  <title>RoleBricks | Living Scenes</title>
+  <link rel="stylesheet" href="/static/css/app.css?v=rolebricks-1">
+  
   <link rel="stylesheet" href="/static/css/worlds.css?v=rolebricks-1">
-{% endblock %}
-{% block content %}
+
+</head>
+<body data-page="worlds">
+  <div class="ambient-audio-wave" aria-hidden="true">
+    <i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i>
+  </div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="RoleBricks home">
+      <img class="brand-logo" src="/static/images/rolebricks-logo.webp" alt="RoleBricks">
+    </a>
+    <div class="header-meta">
+      <span class="engine-state" id="providerStatus">
+        <i class="status-dot"></i>
+        <span>Checking engine</span>
+      </span>
+    </div>
+  </header>
+  <main class="page-shell">
+    
 <div class="world-app" id="worldApp">
   <nav class="scene-progress" aria-label="Scene progress">
     <span class="is-active" data-scene-step="describe"><i>1</i>Describe</span>
@@ -251,8 +279,13 @@
   </div>
   <div id="evidenceList"></div>
 </dialog>
-{% endblock %}
-{% block scripts %}
+
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/static/js/app.js?v=rolebricks-1"></script>
+  
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="/static/js/worlds.js?v=living-scenes-1"></script>
-{% endblock %}
+  <script src="/static/js/worlds.js?v=living-scenes-2"></script>
+
+</body>
+</html>

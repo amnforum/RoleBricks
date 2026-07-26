@@ -1,0 +1,11 @@
+*
+!api/
+!api/**
+!emotionos/
+!emotionos/app/
+!emotionos/app/public/
+!emotionos/app/public/**
+!tests/
+!tests/vercel_gateway.test.mjs
+!package.json
+!vercel.json

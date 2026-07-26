@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -30,7 +31,9 @@ from emotionos.app.services.telemetry import SceneTelemetry
 
 settings = get_settings()
 configure_logging(settings.debug)
-templates = Jinja2Templates(directory="emotionos/app/templates")
+app_directory = Path(__file__).resolve().parent
+public_directory = app_directory / "public"
+templates = Jinja2Templates(directory=app_directory / "templates")
 
 
 @asynccontextmanager
@@ -81,7 +84,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="emotionos/app/static"), name="static")
+app.mount("/static", StaticFiles(directory=public_directory / "static"), name="static")
 app.include_router(worlds.router, prefix="/api", tags=["living scenes"])
 app.include_router(transcriptions.router, prefix="/api", tags=["voice input"])
 app.include_router(admin.router, prefix="/api", tags=["admin observability"])
@@ -119,6 +122,7 @@ def health():
     return {"status": "ok", "app": settings.app_name}
 
 
+@app.get("/api/ready")
 @app.get("/ready")
 def ready(request: Request):
     provider = request.app.state.voice_provider
@@ -159,9 +163,9 @@ def ready(request: Request):
     }
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=FileResponse)
 def worlds_dashboard(request: Request):
-    return templates.TemplateResponse(request, "worlds.html", {"settings": settings})
+    return FileResponse(public_directory / "index.html", media_type="text/html")
 
 
 @app.get("/admin", response_class=HTMLResponse)

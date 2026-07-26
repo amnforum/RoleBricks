@@ -11,6 +11,8 @@ const worldState = {
   currentView: null
 };
 
+const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
+
 const worldViews = {
   describe: '#sceneStart',
   blueprint: '#blueprintView',
@@ -71,6 +73,7 @@ function setWorldBusy(button, busy, label = 'Working...') {
 
 function setSceneHash(sceneId) {
   history.replaceState(null, '', sceneId ? `#scene=${sceneId}` : location.pathname);
+  if (sceneId) rememberScene(sceneId);
 }
 
 function sceneIdFromHash() {
@@ -99,7 +102,7 @@ async function initializeWorlds() {
 async function loadWorldReadiness() {
   const statusElement = $('#providerStatus');
   try {
-    const readiness = await api('/ready');
+    const readiness = await api('/api/ready');
     worldState.readiness = readiness;
     const sceneReady = Boolean(
       readiness.scene_compiler_ready &&
@@ -136,21 +139,53 @@ async function loadWorldReadiness() {
 }
 
 async function loadRecentScenes() {
-  try {
-    const scenes = await api('/api/worlds?limit=6');
-    const container = $('#recentScenes');
-    const list = $('#recentSceneList');
-    if (!container || !list || !scenes.length) return;
-    list.innerHTML = scenes.map((scene) => `
-      <button class="recent-scene" type="button" data-load-scene="${scene.id}">
-        <strong>${escapeHtml(scene.manifest.title)}</strong>
-        <span>${escapeHtml(scene.status.replace('_', ' '))}</span>
-      </button>
-    `).join('');
-    container.classList.remove('is-hidden');
-  } catch (_) {
-    // A new workspace can legitimately have no scene tables until setup completes.
+  const container = $('#recentScenes');
+  const list = $('#recentSceneList');
+  if (!container || !list) return;
+  const ids = recentSceneIds();
+  if (!ids.length) return;
+
+  const scenes = (await Promise.all(ids.map(async (sceneId) => {
+    try {
+      return await api(`/api/worlds/${sceneId}`);
+    } catch (_) {
+      forgetScene(sceneId);
+      return null;
+    }
+  }))).filter(Boolean);
+
+  if (!scenes.length) {
+    container.classList.add('is-hidden');
+    return;
   }
+  list.innerHTML = scenes.map((scene) => `
+    <button class="recent-scene" type="button" data-load-scene="${scene.id}">
+      <strong>${escapeHtml(scene.manifest.title)}</strong>
+      <span>${escapeHtml(scene.status.replace('_', ' '))}</span>
+    </button>
+  `).join('');
+  container.classList.remove('is-hidden');
+}
+
+function recentSceneIds() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(recentSceneStorageKey) || '[]');
+    return Array.isArray(stored)
+      ? stored.filter((value) => /^[0-9a-f-]{36}$/i.test(value)).slice(0, 6)
+      : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function rememberScene(sceneId) {
+  const next = [sceneId, ...recentSceneIds().filter((value) => value !== sceneId)].slice(0, 6);
+  localStorage.setItem(recentSceneStorageKey, JSON.stringify(next));
+}
+
+function forgetScene(sceneId) {
+  const next = recentSceneIds().filter((value) => value !== sceneId);
+  localStorage.setItem(recentSceneStorageKey, JSON.stringify(next));
 }
 
 async function loadWorldScene(sceneId) {
