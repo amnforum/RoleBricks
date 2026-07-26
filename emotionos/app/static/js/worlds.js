@@ -301,6 +301,7 @@ function castRow(character, index) {
           <input data-speech-code-mixing value="${escapeHtml(speech.code_mixing || 'natural')}" maxlength="160">
         </label>
         <p class="cast-selection-note">${escapeHtml(character.selection_reason || '')}</p>
+        ${character.portrayal_notice ? `<p class="simulation-notice">${escapeHtml(character.portrayal_notice)}</p>` : ''}
       </div>
     </article>
   `;
@@ -490,11 +491,14 @@ function renderReady(scene) {
   $('#readyUserRole').textContent = `${scene.manifest.user_role.name} - ${scene.manifest.user_role.role}`;
   $('#readyCast').innerHTML = scene.agents.map((agent, index) => {
     const speech = agent.voice_profile.speech || {};
+    const profile = agent.profile || {};
+    const portrayalNotice = profile.portrayal_notice || '';
     return `
       <article class="ready-character">
         <span class="character-index">0${index + 1}</span>
         <h2>${escapeHtml(agent.name)}</h2>
         <p>${escapeHtml(agent.role)}</p>
+        ${portrayalNotice ? `<p class="simulation-notice">${escapeHtml(portrayalNotice)}</p>` : ''}
         <div class="character-voice">
           <button type="button" data-play-audio="${escapeHtml(agent.voice_profile.sample_audio_url || '')}" aria-label="Play ${escapeHtml(agent.name)} voice" title="Play voice sample">
             <i data-lucide="play"></i>
@@ -540,7 +544,7 @@ function renderLive(scene) {
   $('#liveCast').innerHTML = scene.agents.map((agent) => `
     <div class="live-cast-person ${agent.key === latestAgentKey ? 'is-speaking' : ''}" data-live-agent="${escapeHtml(agent.key)}">
       <strong>${escapeHtml(agent.name)}</strong>
-      <span>${escapeHtml(agent.role)}</span>
+      <span>${escapeHtml(agent.role + (agent.profile?.identity_kind === 'public_figure' ? ' - Public-info simulation' : ''))}</span>
     </div>
   `).join('');
 

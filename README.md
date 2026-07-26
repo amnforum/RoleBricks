@@ -1,4 +1,4 @@
-# EmotionOS Worlds
+# RoleBricks
 
 EmotionOS turns an open-ended situation into a persistent, voice-first scene with up to three AI characters. Users describe a scenario, review the generated Blueprint, approve the cast, and enter a researched scene with durable memory and expressive speech.
 
@@ -11,6 +11,8 @@ EmotionOS turns an open-ended situation into a persistent, voice-first scene wit
 5. Review evidence and distinct voice samples.
 6. Enter the scene, interact, pause, and resume with persistent memory.
 
+Real public people are supported as clearly labelled public-information practice simulations. RoleBricks uses an original synthetic voice and never presents the agent as the real person.
+
 ## Runtime Architecture
 
 - FastAPI and Jinja UI
@@ -20,7 +22,8 @@ EmotionOS turns an open-ended situation into a persistent, voice-first scene wit
 - OpenAI Responses API for fresh public research
 - Adaptive speech routing across Sarvam, OpenAI, and a Hugging Face Space
 - MLflow tracing with dialogue and private memories excluded
-- Bounded queues and a strict three-character MVP limit
+- Bounded queues, reusable prepared agent packs, and a strict three-character MVP limit
+- Protected admin observability at `/admin` using the Databricks forwarded user email
 
 No model weights or local GPU runtime are shipped with the Databricks App. The Hugging Face inference source remains in `hf_space/` and is deployed separately.
 
@@ -112,3 +115,4 @@ The acceptance suite covers unseen scenarios, approval-before-spend, the three-c
 - `POST /api/worlds/{id}/resume`
 - `POST /api/worlds/{id}/complete`
 - `GET /ready`
+- `GET /api/admin/overview` (admin only)

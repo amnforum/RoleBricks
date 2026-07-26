@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from emotionos.app.api import transcriptions, worlds
+from emotionos.app.api import admin, transcriptions, worlds
 from emotionos.app.audio.storage import StorageManager
 from emotionos.app.core.config import get_settings
 from emotionos.app.core.exceptions import EmotionOSError
@@ -84,6 +84,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="emotionos/app/static"), name="static")
 app.include_router(worlds.router, prefix="/api", tags=["living scenes"])
 app.include_router(transcriptions.router, prefix="/api", tags=["voice input"])
+app.include_router(admin.router, prefix="/api", tags=["admin observability"])
 
 
 @app.exception_handler(EmotionOSError)
@@ -130,22 +131,14 @@ def ready(request: Request):
         "ready": status.ready,
         "provider": status.provider,
         "engine_version": status.engine_version,
-        "message": request.app.state.provider_notice,
-        "audio_data_dir": str(settings.audio_root),
+        "message": "Voice routing is operational." if status.ready else "Voice routing needs setup.",
         "openai_configured": settings.openai_configured,
         "sarvam_configured": settings.sarvam_configured,
+        "space_configured": bool(settings.hf_space_id.strip() and settings.hf_token.strip()),
         "openai_voice_ready": bool(openai_status and openai_status.ready),
         "sarvam_voice_ready": bool(sarvam_status and sarvam_status.ready),
         "space_voice_ready": bool(space_status and space_status.ready),
-        "openai_voice_message": openai_status.message if openai_status else None,
-        "sarvam_voice_message": sarvam_status.message if sarvam_status else None,
-        "space_voice_message": space_status.message if space_status else None,
         "voice_provider": settings.voice_provider,
-        "hf_space_id": settings.hf_space_id or None,
-        "hf_space_api_name": settings.hf_space_api_name,
-        "tts_model": settings.openai_tts_model,
-        "transcription_model": settings.openai_transcription_model,
-        "sarvam_tts_model": settings.sarvam_tts_model,
         "scene_compiler_provider": settings.scene_compiler_provider,
         "scene_compiler_ready": settings.scene_compiler_provider == "rules" or settings.databricks_configured,
         "scene_research_provider": settings.scene_research_provider,
@@ -162,10 +155,6 @@ def ready(request: Request):
         ),
         "database_backend": settings.database_backend,
         "lakebase_ready": settings.database_backend == "local" or settings.lakebase_configured,
-        "databricks_serving_endpoint": settings.databricks_serving_endpoint or None,
-        "databricks_ai_search_index": settings.databricks_ai_search_index or None,
-        "databricks_sql_warehouse_id": settings.databricks_sql_warehouse_id or None,
-        "mlflow_experiment_id": settings.mlflow_experiment_id or None,
         "scene_max_agents": settings.scene_max_agents,
     }
 
@@ -173,3 +162,15 @@ def ready(request: Request):
 @app.get("/", response_class=HTMLResponse)
 def worlds_dashboard(request: Request):
     return templates.TemplateResponse(request, "worlds.html", {"settings": settings})
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_dashboard(
+    request: Request,
+    viewer: str = Depends(admin.require_admin),
+):
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {"settings": settings, "viewer": viewer},
+    )

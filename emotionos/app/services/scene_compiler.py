@@ -57,9 +57,11 @@ class DatabricksSceneCompiler:
             "as a separate candidate, up to eight candidates. Mark at most three as selected. If more than three "
             "would help, keep the additional candidates with selected=false and explain why, so the user chooses; "
             "never silently merge or remove roles. Public and private knowledge must be role-appropriate. Keep "
-            "language, region, accent, dialect, and code-mixing independent. A request to simulate a public person "
-            "uses a distinct synthetic voice unless an authorized voice reference is explicitly supplied. Exact "
-            "speaker matching requires consent. Use only supportive, realistic, or high_pressure for pressure. "
+            "language, region, accent, dialect, and code-mixing independent. Mark every real public person as "
+            "identity_kind=public_figure, require a visible portrayal_notice, and always use a distinct synthetic "
+            "voice. Never request, imply, or promise voice imitation. Set metadata.reuse_key to a stable, short key "
+            "for the selected counterpart, language, and scene type. Use only supportive, realistic, or "
+            "high_pressure for pressure. "
             "Return JSON only and satisfy this JSON Schema exactly:\n"
             f"{schema}"
         )
@@ -81,8 +83,10 @@ class DatabricksSceneCompiler:
         system = (
             "Prepare only the selected characters in the confirmed Scene Manifest. Build one scene-specific "
             "Persona per selected character. Separate stable facts from current facts, retain uncertainty, avoid "
-            "inventing facts absent from the research packet, and extract high-level conversational mannerisms "
-            "without copying quotations. Opening lines must begin the requested situation naturally. Return JSON "
+            "inventing facts absent from the research packet, and extract broad conversational mannerisms without "
+            "copying quotations, catchphrases, or a real person's vocal identity. Opening lines must begin the "
+            "requested situation naturally in one or two short sentences. For Hinglish, write Hindi words in "
+            "Devanagari and English words in Latin script so the speech engine pronounces both naturally. Return JSON "
             "only and satisfy this JSON Schema exactly:\n"
             f"{schema}"
         )
@@ -119,7 +123,11 @@ class DatabricksSceneCompiler:
             "contradictions, scene pressure, private knowledge, and relevant memory. Then write only what that "
             "character would actually say. Be direct or confrontational when the scene requires it, but never use "
             "random abuse. Do not leak private knowledge unless the chosen strategy reveals it. Cite only supplied "
-            "source IDs. Keep the spoken response natural, concise, and easy to perform aloud. Return JSON only and "
+            "source IDs. Follow the character's exact language, accent, dialect, and code-mixing profile. Keep the "
+            "spoken response to one to three short conversational sentences, allow interruption only at a phrase "
+            "boundary, and avoid formal assistant language. For Hinglish, write Hindi words in Devanagari and English "
+            "words in Latin script. A public figure is always a clearly labelled public-information simulation: "
+            "never claim to be the real person, copy catchphrases, or imitate their voice. Return JSON only and "
             "satisfy this JSON Schema exactly:\n"
             f"{schema}"
         )
@@ -141,7 +149,7 @@ class DatabricksSceneCompiler:
         data, usage = await self.client.generate_json(
             system_prompt=system,
             user_prompt=json.dumps(payload, ensure_ascii=False),
-            max_tokens=1200,
+            max_tokens=700,
         )
         data["character_key"] = character.key
         return CharacterAction.model_validate(data), usage
@@ -157,14 +165,22 @@ class RuleBasedSceneCompiler:
         counterpart = self._infer_counterpart(prompt)
         title_words = re.findall(r"[A-Za-z0-9']+", prompt)[:7]
         title = " ".join(title_words).strip().title() or "New Scene"
-        language = "Hindi" if re.search(r"\bhindi\b", prompt, re.IGNORECASE) else "English"
+        language = (
+            "Hinglish"
+            if re.search(r"\b(hinglish|code[- ]?mix(?:ed|ing)?)\b", prompt, re.IGNORECASE)
+            else "Hindi"
+            if re.search(r"\bhindi\b", prompt, re.IGNORECASE)
+            else "English"
+        )
         region = "India" if locale.lower().endswith("in") else "Global"
+        identity_kind = self._infer_identity_kind(prompt)
         candidates = [
             SceneCharacterDraft(
                 key="primary-counterpart",
                 name=counterpart,
                 role="Primary counterpart",
                 identity=counterpart if counterpart != "Primary counterpart" else "",
+                identity_kind=identity_kind,
                 summary="The central person the user must engage with to move the situation forward.",
                 objective="Pursue their own credible objective and test the user's decisions.",
                 goals=["Advance their position", "Respond consistently to evidence"],
@@ -173,7 +189,12 @@ class RuleBasedSceneCompiler:
                 authority=65,
                 selected=True,
                 selection_reason="The scenario needs a primary counterpart.",
-                speech=SceneSpeechProfile(language=language, region=region, accent="Indian" if region == "India" else "Neutral"),
+                speech=SceneSpeechProfile(
+                    language=language,
+                    region=region,
+                    accent="Indian" if region == "India" else "Neutral",
+                    code_mixing="natural conversational Hinglish" if language == "Hinglish" else "natural",
+                ),
                 voice=SceneVoiceProfile(),
             ),
             SceneCharacterDraft(
@@ -220,7 +241,11 @@ class RuleBasedSceneCompiler:
             pressure="realistic",
             required_fresh_searches=[],
             assumptions=["This deterministic compiler is active only because SCENE_COMPILER_PROVIDER=rules was selected."],
-            metadata={"compiler": "rules", "locale": locale},
+            metadata={
+                "compiler": "rules",
+                "locale": locale,
+                "reuse_key": f"{counterpart.casefold()}|{language.casefold()}|{region.casefold()}",
+            },
         )
         return manifest, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
@@ -275,6 +300,14 @@ class RuleBasedSceneCompiler:
             ),
             {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         )
+
+    @staticmethod
+    def _infer_identity_kind(prompt: str) -> str:
+        public_markers = (
+            r"\b(public figure|celebrity|bollywood|actor|actress|film star|politician|"
+            r"cricketer|singer|famous personality)\b"
+        )
+        return "public_figure" if re.search(public_markers, prompt, re.IGNORECASE) else "original"
 
     @staticmethod
     def _infer_user_role(prompt: str) -> SceneUserRole:

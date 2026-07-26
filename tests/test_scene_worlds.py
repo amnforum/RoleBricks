@@ -97,6 +97,13 @@ def test_confirm_prepares_cast_voice_memory_and_live_turn(client):
     assert response.status_code == 200, response.text
     active = response.json()
     assert active["turns"][-1]["speaker_type"] == "agent"
+    assert active["turns"][-1]["turn_data"]["latency_ms"] >= 0
+    assert set(active["turns"][-1]["turn_data"]["latency_breakdown_ms"]) == {
+        "research",
+        "retrieval",
+        "reasoning",
+        "voice",
+    }
     assert active["turns"][-1]["action"] in {
         "answer",
         "challenge",
@@ -151,3 +158,52 @@ def test_stale_blueprint_version_is_rejected(client):
     assert response.status_code == 422
     assert response.json()["details"]["current_version"] == 1
 
+
+def test_public_figure_scene_is_labelled_and_forces_an_original_voice(client):
+    response = client.post(
+        "/api/worlds/draft",
+        json={
+            "prompt": (
+                "I want a Hinglish interview practice scene with Shah Rukh Khan, "
+                "a Bollywood celebrity, before tomorrow's entertainment interview."
+            ),
+            "locale": "en-IN",
+        },
+    )
+    assert response.status_code == 201, response.text
+    primary = response.json()["manifest"]["ai_characters"][0]
+    assert primary["identity_kind"] == "public_figure"
+    assert primary["voice"]["identity_mode"] == "distinct_synthetic"
+    assert primary["voice"]["requested_identity"] == ""
+    assert "simulation" in primary["portrayal_notice"].casefold()
+    assert primary["speech"]["language"] == "Hinglish"
+
+
+def test_identical_scene_restores_prepared_pack_without_copying_conversation(client):
+    first = _create_scene(client)
+    first_id = first["id"]
+    confirmed = client.post(
+        f"/api/worlds/{first_id}/confirm",
+        json={"expected_version": first["active_manifest_version"]},
+    )
+    assert confirmed.status_code == 202, confirmed.text
+    _wait_until_ready(client, first_id)
+    assert client.post(f"/api/worlds/{first_id}/enter").status_code == 200
+    first_turn = client.post(
+        f"/api/worlds/{first_id}/turns",
+        json={"text": "This sentence must remain private to the first scene."},
+    )
+    assert first_turn.status_code == 200, first_turn.text
+
+    second = _create_scene(client)
+    second_id = second["id"]
+    confirmed = client.post(
+        f"/api/worlds/{second_id}/confirm",
+        json={"expected_version": second["active_manifest_version"]},
+    )
+    assert confirmed.status_code == 202, confirmed.text
+    restored = _wait_until_ready(client, second_id)
+    assert restored["preparation"]["cache_hit"] is True
+    assert restored["preparation_job"]["job_data"]["cache_hit"] is True
+    assert len(restored["turns"]) == 1
+    assert "private to the first scene" not in restored["turns"][0]["text"]

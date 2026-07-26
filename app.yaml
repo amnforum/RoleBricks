@@ -3,6 +3,8 @@ command:
   - run.py
 
 env:
+  - name: APP_NAME
+    value: RoleBricks
   - name: APP_ENV
     value: production
   - name: APP_HOST
@@ -31,6 +33,12 @@ env:
     value: "3"
   - name: SCENE_WORKER_COUNT
     value: "2"
+  - name: SCENE_CACHE_TTL_MINUTES
+    value: "360"
+  - name: SCENE_STABLE_CACHE_TTL_MINUTES
+    value: "10080"
+  - name: ADMIN_EMAIL_ALLOWLIST
+    value: amnxchauhan@gmail.com
   - name: DATABRICKS_SERVING_ENDPOINT
     valueFrom: foundation-model
   - name: DATABRICKS_AI_SEARCH_INDEX

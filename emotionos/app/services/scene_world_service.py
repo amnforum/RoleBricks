@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import re
+import time
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +46,7 @@ from emotionos.app.domain.scene_manifest import (
 )
 from emotionos.app.domain.schemas import SpeechProfile
 from emotionos.app.providers.base import VoiceGenerationContext, VoiceProvider
+from emotionos.app.providers.routing_policy import accent_delivery_instruction
 from emotionos.app.services.floor_manager import FloorManager
 from emotionos.app.services.job_queue import PriorityJobQueue
 from emotionos.app.services.scene_compiler import SceneCompiler
@@ -108,6 +113,7 @@ class SceneWorldService:
             preparation={
                 "compiler": self.compiler.provider_name,
                 "compiler_usage": usage,
+                "cache_key": self._scene_cache_key(manifest),
                 "research_started": False,
                 "message": "Review your role and cast before any research or voice work begins.",
             },
@@ -238,6 +244,7 @@ class SceneWorldService:
         scene.preparation = {
             **dict(scene.preparation or {}),
             "invalidated_components": invalidated,
+            "cache_key": self._scene_cache_key(updated),
             "message": "Blueprint changed. Confirm it again before preparation.",
         }
         db.add(
@@ -284,6 +291,7 @@ class SceneWorldService:
         scene.preparation = {
             **dict(scene.preparation or {}),
             "invalidated_components": invalidated,
+            "cache_key": self._scene_cache_key(manifest),
             "message": f"Reverted to blueprint {payload.target_version}. Confirm it before preparation.",
         }
         db.add(
@@ -321,12 +329,18 @@ class SceneWorldService:
                 details={"characters": unauthorized},
             )
 
+        cache_source_id = self._find_cached_scene(db, scene, manifest)
         scene.status = "confirmed"
         scene.confirmed_at = utc_now()
         scene.preparation = {
             **dict(scene.preparation or {}),
-            "message": "Blueprint confirmed. Preparation is queued.",
+            "message": (
+                "Prepared agent pack found. Fast restore is queued."
+                if cache_source_id
+                else "Blueprint confirmed. Preparation is queued."
+            ),
             "research_started": False,
+            "cache_available": bool(cache_source_id),
         }
         job = ScenePreparationJob(
             scene_id=scene.id,
@@ -337,6 +351,8 @@ class SceneWorldService:
             job_data={
                 "compiler": self.compiler.provider_name,
                 "research_provider": self.research.provider_name,
+                "cache_source_scene_id": str(cache_source_id) if cache_source_id else None,
+                "cache_hit": False,
             },
         )
         db.add(job)
@@ -391,9 +407,31 @@ class SceneWorldService:
             job.stage = "resolving_scene"
             job.progress = 8
             job.started_at = utc_now()
+            cache_source_scene_id = (job.job_data or {}).get("cache_source_scene_id")
             db.commit()
 
         try:
+            if cache_source_scene_id:
+                cached_records = self._clone_cached_scene(
+                    job_id=job_id,
+                    source_scene_id=uuid.UUID(str(cache_source_scene_id)),
+                )
+                if cached_records is not None:
+                    with self.telemetry.span(
+                        "scene.restore_cache",
+                        span_type="CHAIN",
+                        inputs={"scene_id": str(job.scene_id), "record_count": len(cached_records)},
+                    ) as span:
+                        await self.retriever.index(cached_records)
+                        span.set_outputs({"cache_hit": True, "indexed_records": len(cached_records)})
+                    return
+                self._set_job_progress(
+                    job_id,
+                    stage="resolving_scene",
+                    progress=8,
+                    data={"cache_source_scene_id": None, "cache_hit": False},
+                )
+
             with self.telemetry.span(
                 "scene.research",
                 span_type="RETRIEVER",
@@ -563,6 +601,7 @@ class SceneWorldService:
         scene_id: uuid.UUID,
         payload: SceneTurnCreate,
     ) -> WorldSceneRead:
+        turn_started = time.perf_counter()
         scene = db.scalar(self._scene_query().where(Scene.id == scene_id))
         if scene is None:
             raise NotFoundError("Scene was not found")
@@ -642,57 +681,69 @@ class SceneWorldService:
             for source in scene.sources[:10]
         ]
         live_research_usage: dict[str, int] = {}
+        research_ms = 0
+        retrieval_started = time.perf_counter()
+        retrieval_task = asyncio.create_task(
+            self.retriever.retrieve(
+                scene_id=scene.id,
+                character_key=character.key,
+                query=payload.text,
+                current_memories=memory_payload,
+                current_sources=source_payload,
+            )
+        )
+        live_packet: dict[str, Any] = {"sources": []}
         if self._needs_fresh_research(payload.text):
             query = (
                 f"{character.identity or character.name}: verify current public facts needed to answer "
                 f"the user's question in this scene"
             )
+            research_started = time.perf_counter()
+            research_task = asyncio.create_task(self.research.research([query]))
             with self.telemetry.span(
                 "scene.live_research",
                 span_type="RETRIEVER",
                 inputs={"scene_id": str(scene.id), "character_key": character.key, "query_count": 1},
             ) as span:
-                live_packet, live_research_usage = await self.research.research([query])
+                live_packet, live_research_usage = await research_task
                 span.set_outputs({
                     "source_count": len(live_packet.get("sources") or []),
                     "usage": live_research_usage,
                 })
-            existing_urls = {item["url"] for item in source_payload if item.get("url")}
-            for source_data in live_packet.get("sources") or []:
-                url = str(source_data.get("url") or "").strip()
-                if not url or url in existing_urls:
-                    continue
-                source = SceneSource(
-                    scene_id=scene.id,
-                    agent_key=character.key,
-                    title=str(source_data.get("title") or "Current source")[:500],
-                    url=url,
-                    snippet=str(source_data.get("snippet") or ""),
-                    freshness=str(source_data.get("freshness") or "current")[:40],
-                    source_data={
-                        "published_at": source_data.get("published_at"),
-                        "supports": source_data.get("supports") or [],
-                        "retrieval": "live_turn",
-                    },
-                )
-                db.add(source)
-                db.flush()
-                source_payload.insert(0, {
-                    "id": str(source.id),
-                    "title": source.title,
-                    "url": source.url,
-                    "snippet": source.snippet,
-                    "freshness": source.freshness,
-                })
-                existing_urls.add(url)
+            research_ms = round((time.perf_counter() - research_started) * 1000)
 
-        memory_payload, source_payload = await self.retriever.retrieve(
-            scene_id=scene.id,
-            character_key=character.key,
-            query=payload.text,
-            current_memories=memory_payload,
-            current_sources=source_payload,
-        )
+        memory_payload, source_payload = await retrieval_task
+        retrieval_ms = round((time.perf_counter() - retrieval_started) * 1000)
+        existing_urls = {item["url"] for item in source_payload if item.get("url")}
+        for source_data in live_packet.get("sources") or []:
+            url = str(source_data.get("url") or "").strip()
+            if not url or url in existing_urls:
+                continue
+            source = SceneSource(
+                scene_id=scene.id,
+                agent_key=character.key,
+                title=str(source_data.get("title") or "Current source")[:500],
+                url=url,
+                snippet=str(source_data.get("snippet") or ""),
+                freshness=str(source_data.get("freshness") or "current")[:40],
+                source_data={
+                    "published_at": source_data.get("published_at"),
+                    "supports": source_data.get("supports") or [],
+                    "retrieval": "live_turn",
+                },
+            )
+            db.add(source)
+            db.flush()
+            source_payload.insert(0, {
+                "id": str(source.id),
+                "title": source.title,
+                "url": source.url,
+                "snippet": source.snippet,
+                "freshness": source.freshness,
+            })
+            existing_urls.add(url)
+
+        decision_started = time.perf_counter()
         with self.telemetry.span(
             "scene.character_turn",
             span_type="AGENT",
@@ -717,9 +768,11 @@ class SceneWorldService:
                 "citation_count": len(action.cited_source_ids),
                 "usage": usage,
             })
+        decision_ms = round((time.perf_counter() - decision_started) * 1000)
 
         audio_path: str | None = None
         audio_data: dict[str, Any]
+        voice_started = time.perf_counter()
         try:
             audio_path, audio_data = await self._generate_agent_audio(
                 scene_id=scene.id,
@@ -733,6 +786,8 @@ class SceneWorldService:
                 "error": str(exc),
                 "fallback_used": False,
             }
+        voice_ms = round((time.perf_counter() - voice_started) * 1000)
+        total_latency_ms = round((time.perf_counter() - turn_started) * 1000)
 
         ai_turn = SceneTurn(
             scene_id=scene.id,
@@ -752,6 +807,13 @@ class SceneWorldService:
                 "floor_reason": floor.reason,
                 "usage": usage,
                 "live_research_usage": live_research_usage,
+                "latency_ms": total_latency_ms,
+                "latency_breakdown_ms": {
+                    "research": research_ms,
+                    "retrieval": retrieval_ms,
+                    "reasoning": decision_ms,
+                    "voice": voice_ms,
+                },
             },
         )
         db.add(ai_turn)
@@ -830,6 +892,281 @@ class SceneWorldService:
         if not path.exists():
             raise NotFoundError("Character voice sample file was not found")
         return path
+
+    def _find_cached_scene(
+        self,
+        db: Session,
+        scene: Scene,
+        manifest: SceneManifest,
+    ) -> uuid.UUID | None:
+        cache_key = str((scene.preparation or {}).get("cache_key") or self._scene_cache_key(manifest))
+        ttl_minutes = (
+            self.settings.scene_cache_ttl_minutes
+            if manifest.required_fresh_searches
+            else self.settings.scene_stable_cache_ttl_minutes
+        )
+        cutoff = utc_now() - timedelta(minutes=ttl_minutes)
+        candidates = list(
+            db.scalars(
+                select(Scene)
+                .where(
+                    Scene.id != scene.id,
+                    Scene.status.in_(["ready", "live", "paused", "completed"]),
+                    Scene.ready_at.is_not(None),
+                    Scene.ready_at >= cutoff,
+                )
+                .order_by(Scene.ready_at.desc())
+                .limit(30)
+            ).all()
+        )
+        for candidate in candidates:
+            if str((candidate.preparation or {}).get("cache_key") or "") == cache_key:
+                return candidate.id
+        return None
+
+    def _clone_cached_scene(
+        self,
+        *,
+        job_id: uuid.UUID,
+        source_scene_id: uuid.UUID,
+    ) -> list[dict[str, Any]] | None:
+        with self.session_factory() as db:
+            job = db.get(ScenePreparationJob, job_id)
+            if job is None:
+                return None
+            target = db.scalar(self._scene_query().where(Scene.id == job.scene_id))
+            source = db.scalar(self._scene_query().where(Scene.id == source_scene_id))
+            if target is None or source is None:
+                return None
+            target_key = str((target.preparation or {}).get("cache_key") or "")
+            source_key = str((source.preparation or {}).get("cache_key") or "")
+            if not target_key or target_key != source_key:
+                return None
+
+            target_manifest = SceneManifest.model_validate(target.manifest)
+            selected_keys = {character.key for character in target_manifest.selected_characters}
+            source_agents = [agent for agent in source.agents if agent.agent_key in selected_keys]
+            opening = next(
+                (
+                    turn
+                    for turn in source.turns
+                    if turn.speaker_type == "agent" and (turn.turn_data or {}).get("opening")
+                ),
+                None,
+            )
+            if (
+                len(source_agents) != len(selected_keys)
+                or opening is None
+                or not opening.audio_path
+                or opening.speaker_key not in selected_keys
+            ):
+                return None
+            audio_paths = [
+                str((agent.voice_profile or {}).get("sample_audio_path") or "")
+                for agent in source_agents
+            ]
+            if any(not path or not self.storage.resolve(path).exists() for path in audio_paths):
+                return None
+            if not self.storage.resolve(opening.audio_path).exists():
+                return None
+
+            db.execute(delete(SceneMemoryRecord).where(SceneMemoryRecord.scene_id == target.id))
+            db.execute(delete(SceneTurn).where(SceneTurn.scene_id == target.id))
+            db.execute(delete(SceneAgent).where(SceneAgent.scene_id == target.id))
+            db.execute(delete(SceneSource).where(SceneSource.scene_id == target.id))
+            db.flush()
+
+            created_agents: dict[str, SceneAgent] = {}
+            for index, source_agent in enumerate(sorted(source_agents, key=lambda item: item.sort_order)):
+                profile = self._json_copy(source_agent.profile)
+                draft = profile if isinstance(profile, dict) else {}
+                runtime_state = {
+                    "mood": "focused",
+                    "patience": int(draft.get("patience") or 55),
+                    "authority": int(draft.get("authority") or 50),
+                    "turn_count": 0,
+                }
+                voice_profile = self._json_copy(source_agent.voice_profile)
+                voice_profile["cache_hit"] = True
+                voice_profile["cache_source_scene_id"] = str(source.id)
+                agent = SceneAgent(
+                    scene_id=target.id,
+                    character_id=source_agent.character_id,
+                    agent_key=source_agent.agent_key,
+                    name=source_agent.name,
+                    role=source_agent.role,
+                    selected=True,
+                    sort_order=index,
+                    profile=profile,
+                    runtime_state=runtime_state,
+                    voice_profile=voice_profile,
+                )
+                db.add(agent)
+                db.flush()
+                created_agents[agent.agent_key] = agent
+
+            source_agent_keys = {agent.id: agent.agent_key for agent in source_agents}
+            memories = list(
+                db.scalars(
+                    select(SceneMemoryRecord).where(
+                        SceneMemoryRecord.scene_id == source.id,
+                        SceneMemoryRecord.layer == "canon",
+                        SceneMemoryRecord.active.is_(True),
+                    )
+                ).all()
+            )
+            for memory in memories:
+                key = source_agent_keys.get(memory.agent_id)
+                target_agent = created_agents.get(key or "")
+                if target_agent is None:
+                    continue
+                db.add(
+                    SceneMemoryRecord(
+                        scene_id=target.id,
+                        agent_id=target_agent.id,
+                        layer=memory.layer,
+                        visibility=memory.visibility,
+                        content=memory.content,
+                        importance=memory.importance,
+                        active=True,
+                        memory_data={
+                            **self._json_copy(memory.memory_data),
+                            "cache_source_scene_id": str(source.id),
+                        },
+                    )
+                )
+
+            for source_row in source.sources:
+                db.add(
+                    SceneSource(
+                        scene_id=target.id,
+                        agent_key=source_row.agent_key,
+                        title=source_row.title,
+                        url=source_row.url,
+                        snippet=source_row.snippet,
+                        source_type=source_row.source_type,
+                        freshness=source_row.freshness,
+                        source_data={
+                            **self._json_copy(source_row.source_data),
+                            "cache_source_scene_id": str(source.id),
+                        },
+                    )
+                )
+
+            opening_agent = created_agents[opening.speaker_key]
+            db.add(
+                SceneTurn(
+                    scene_id=target.id,
+                    speaker_type="agent",
+                    speaker_key=opening_agent.agent_key,
+                    speaker_name=opening_agent.name,
+                    action=opening.action,
+                    text=opening.text,
+                    audio_path=opening.audio_path,
+                    audio_data={
+                        **self._json_copy(opening.audio_data),
+                        "cache_hit": True,
+                        "cache_source_scene_id": str(source.id),
+                    },
+                    citations=[],
+                    turn_data={"opening": True, "cache_hit": True},
+                )
+            )
+            job.status = "completed"
+            job.stage = "ready"
+            job.progress = 100
+            job.completed_at = utc_now()
+            job.job_data = {
+                **dict(job.job_data or {}),
+                "cache_hit": True,
+                "cache_source_scene_id": str(source.id),
+                "source_count": len(source.sources),
+                "character_count": len(created_agents),
+            }
+            target.status = "ready"
+            target.ready_at = utc_now()
+            target.preparation = {
+                **dict(target.preparation or {}),
+                "research_started": False,
+                "cache_hit": True,
+                "cache_source_scene_id": str(source.id),
+                "source_count": len(source.sources),
+                "character_count": len(created_agents),
+                "evidence_summary": list((source.preparation or {}).get("evidence_summary") or []),
+                "message": "Scene ready from a verified prepared agent pack.",
+                "error": None,
+            }
+            db.flush()
+
+            agent_keys = {agent.id: agent.agent_key for agent in created_agents.values()}
+            index_records = [
+                {
+                    "record_id": f"memory:{memory.id}",
+                    "scene_id": str(target.id),
+                    "character_key": agent_keys.get(memory.agent_id, ""),
+                    "record_type": memory.layer,
+                    "content": memory.content,
+                    "title": "",
+                    "url": "",
+                    "freshness": "stable",
+                    "importance": memory.importance,
+                    "visibility": memory.visibility,
+                }
+                for memory in db.scalars(
+                    select(SceneMemoryRecord).where(SceneMemoryRecord.scene_id == target.id)
+                ).all()
+            ]
+            index_records.extend(
+                {
+                    "record_id": f"source:{source_row.id}",
+                    "scene_id": str(target.id),
+                    "character_key": source_row.agent_key or "",
+                    "record_type": "source",
+                    "content": source_row.snippet,
+                    "title": source_row.title,
+                    "url": source_row.url,
+                    "freshness": source_row.freshness,
+                    "importance": 65,
+                    "visibility": "public",
+                }
+                for source_row in db.scalars(
+                    select(SceneSource).where(SceneSource.scene_id == target.id)
+                ).all()
+            )
+            db.commit()
+            return index_records
+
+    @staticmethod
+    def _scene_cache_key(manifest: SceneManifest) -> str:
+        normalize = lambda value: re.sub(r"\s+", " ", str(value or "").strip().casefold())
+        payload = {
+            "reuse_key": normalize(manifest.metadata.get("reuse_key")),
+            "user_role": normalize(manifest.user_role.role),
+            "objective": normalize(manifest.objective),
+            "pressure": manifest.pressure,
+            "characters": sorted(
+                [
+                    {
+                        "name": normalize(character.name),
+                        "role": normalize(character.role),
+                        "identity_kind": character.identity_kind,
+                        "language": normalize(character.speech.language),
+                        "region": normalize(character.speech.region),
+                        "accent": normalize(character.speech.accent),
+                        "dialect": normalize(character.speech.dialect),
+                        "presentation": character.voice.presentation,
+                    }
+                    for character in manifest.selected_characters
+                ],
+                key=lambda item: (item["name"], item["role"]),
+            ),
+        }
+        canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _json_copy(value: Any) -> Any:
+        return json.loads(json.dumps(value or {}))
 
     def _persist_prepared_scene(
         self,
@@ -1073,22 +1410,41 @@ class SceneWorldService:
         context = VoiceGenerationContext(
             voice_mode="adaptive_stock",
             speech_profile=profile,
-            consent_confirmed=character.voice.consent_confirmed,
-            take_strength=0.72,
+            consent_confirmed=(
+                False
+                if character.identity_kind == "public_figure"
+                else character.voice.consent_confirmed
+            ),
+            take_strength=0.68 if profile.language == "hinglish-IN" else 0.62,
         )
+        voice_id = self._adaptive_voice_id(character)
+        route_for = getattr(self.voice_provider, "route_for", None)
+        route = route_for(voice_id, context) if callable(route_for) else None
+        if character.identity_kind == "public_figure":
+            identity_direction = (
+                "Perform as an original interview-practice counterpart informed by public facts. "
+                "Do not imitate, reproduce, or claim to be the real person's voice."
+            )
+        else:
+            identity_direction = f"Perform as {character.name}, {character.role}."
         instructions = (
-            f"Perform as {character.name}, {character.role}. {character.voice.performance}. "
+            f"{identity_direction} {character.voice.performance} "
+            f"{accent_delivery_instruction(profile)} "
             f"Use {character.speech.dialect or character.speech.accent} delivery with "
-            f"{character.speech.code_mixing} code-mixing. Keep sentence flow natural and emotionally responsive."
+            f"{character.speech.code_mixing} code-mixing. Keep conversational breath groups, "
+            "small phrase-boundary pauses, and one continuous emotional intention. "
+            "Read only the supplied words and never add commentary."
         )
+        generation_started = time.perf_counter()
         generated = await asyncio.to_thread(
             self.voice_provider.generate,
             text,
-            self._adaptive_voice_id(character),
+            voice_id,
             None,
             instructions=instructions,
             context=context,
         )
+        generation_ms = round((time.perf_counter() - generation_started) * 1000)
         stored = await asyncio.to_thread(
             self.storage.store_audio,
             generated.path,
@@ -1106,7 +1462,16 @@ class SceneWorldService:
             "duration_seconds": generated.duration_seconds,
             "sample_rate": generated.sample_rate,
             "format": generated.format,
+            "route_provider": route.provider if route else generated.engine_name,
+            "route_label": route.label if route else generated.engine_name,
+            "route_rationale": route.rationale if route else "Declared voice provider.",
+            "generation_ms": generation_ms,
             "fallback_used": False,
+            "identity_mode": (
+                "public_information_simulation"
+                if character.identity_kind == "public_figure"
+                else "original"
+            ),
         }
 
     def _set_job_progress(
@@ -1160,12 +1525,16 @@ class SceneWorldService:
 
     @staticmethod
     def _scene_query():
-        return select(Scene).options(
-            selectinload(Scene.manifest_versions),
-            selectinload(Scene.preparation_jobs),
-            selectinload(Scene.agents),
-            selectinload(Scene.sources),
-            selectinload(Scene.turns),
+        return (
+            select(Scene)
+            .options(
+                selectinload(Scene.manifest_versions),
+                selectinload(Scene.preparation_jobs),
+                selectinload(Scene.agents),
+                selectinload(Scene.sources),
+                selectinload(Scene.turns),
+            )
+            .execution_options(populate_existing=True)
         )
 
     @staticmethod

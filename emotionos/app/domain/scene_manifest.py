@@ -20,6 +20,7 @@ SceneStatus = Literal[
 ]
 ScenePressure = Literal["supportive", "realistic", "high_pressure"]
 MemoryLayer = Literal["canon", "scene", "episode", "reflection"]
+IdentityKind = Literal["original", "fictional", "public_figure", "private_person"]
 
 
 class SceneSpeechProfile(BaseModel):
@@ -60,6 +61,8 @@ class SceneCharacterDraft(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     role: str = Field(min_length=2, max_length=240)
     identity: str = Field(default="", max_length=240)
+    identity_kind: IdentityKind = "original"
+    portrayal_notice: str = Field(default="", max_length=500)
     summary: str = Field(min_length=2, max_length=1000)
     objective: str = Field(min_length=2, max_length=500)
     public_knowledge: list[str] = Field(default_factory=list, max_length=20)
@@ -82,6 +85,25 @@ class SceneCharacterDraft(BaseModel):
         if len(normalized) < 2:
             raise ValueError("character key must contain at least two letters or numbers")
         return normalized[:80]
+
+    @model_validator(mode="after")
+    def protect_public_figure_identity(self) -> "SceneCharacterDraft":
+        if self.identity_kind != "public_figure":
+            return self
+        self.voice.identity_mode = "distinct_synthetic"
+        self.voice.requested_identity = ""
+        self.voice.consent_required = False
+        self.voice.consent_confirmed = False
+        self.voice.performance = (
+            "Use an original expressive voice for a clearly labelled public-information "
+            "simulation. Do not imitate or claim to be the real person."
+        )
+        if not self.portrayal_notice:
+            self.portrayal_notice = (
+                "Public-information simulation with a distinct synthetic voice. "
+                "Not affiliated with or endorsed by the real person."
+            )
+        return self
 
 
 class SceneRelationshipDraft(BaseModel):

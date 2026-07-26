@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}RoleBricks | Operations{% endblock %}
+{% block page_id %}admin{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/static/css/admin.css?v=ops-1">
+{% endblock %}
+{% block content %}
+<section class="ops-shell" aria-labelledby="opsTitle">
+  <header class="ops-heading">
+    <div>
+      <p class="ops-eyebrow">Admin observability</p>
+      <h1 id="opsTitle">RoleBricks operations</h1>
+      <p>Live service health, usage, latency, and routing balance.</p>
+    </div>
+    <div class="ops-actions">
+      <a class="icon-button" href="/" aria-label="Open scenes" title="Open scenes">
+        <i data-lucide="messages-square"></i>
+      </a>
+      <button class="icon-button" type="button" id="refreshOps" aria-label="Refresh operations" title="Refresh operations">
+        <i data-lucide="refresh-cw"></i>
+      </button>
+    </div>
+  </header>
+
+  <div class="ops-overall" id="opsOverall" aria-live="polite">
+    <span class="ops-light"></span>
+    <div>
+      <strong>Checking system</strong>
+      <span id="opsTimestamp">Waiting for the first reading</span>
+    </div>
+  </div>
+
+  <section class="ops-metrics" aria-label="Usage summary">
+    <div><span>Scenes</span><strong id="metricScenes">-</strong><small id="metricScenesDay">- today</small></div>
+    <div><span>Agents</span><strong id="metricAgents">-</strong><small>persistent profiles</small></div>
+    <div><span>Turns</span><strong id="metricTurns">-</strong><small>last 24 hours</small></div>
+    <div><span>Tokens</span><strong id="metricTokens">-</strong><small>recorded usage</small></div>
+  </section>
+
+  <section class="ops-band" aria-labelledby="providerTitle">
+    <div class="ops-section-heading">
+      <div>
+        <p class="ops-eyebrow">Service matrix</p>
+        <h2 id="providerTitle">Providers</h2>
+      </div>
+      <span>No credential values are exposed</span>
+    </div>
+    <div class="provider-list" id="providerList"></div>
+  </section>
+
+  <div class="ops-two-column">
+    <section class="ops-band" aria-labelledby="latencyTitle">
+      <div class="ops-section-heading">
+        <div>
+          <p class="ops-eyebrow">Response time</p>
+          <h2 id="latencyTitle">Latency</h2>
+        </div>
+      </div>
+      <dl class="ops-detail-list">
+        <div><dt>Scene median</dt><dd id="sceneMedian">-</dd></div>
+        <div><dt>Scene p95</dt><dd id="sceneP95">-</dd></div>
+        <div><dt>Turn median</dt><dd id="turnMedian">-</dd></div>
+        <div><dt>Turn p95</dt><dd id="turnP95">-</dd></div>
+      </dl>
+    </section>
+
+    <section class="ops-band" aria-labelledby="queueTitle">
+      <div class="ops-section-heading">
+        <div>
+          <p class="ops-eyebrow">Work control</p>
+          <h2 id="queueTitle">Queue</h2>
+        </div>
+      </div>
+      <dl class="ops-detail-list">
+        <div><dt>Waiting</dt><dd id="queueDepth">-</dd></div>
+        <div><dt>Workers</dt><dd id="queueWorkers">-</dd></div>
+        <div><dt>Running</dt><dd id="queueRunning">-</dd></div>
+        <div><dt>Cache hit rate</dt><dd id="cacheRate">-</dd></div>
+      </dl>
+    </section>
+  </div>
+
+  <div class="ops-two-column">
+    <section class="ops-band" aria-labelledby="voiceTitle">
+      <div class="ops-section-heading">
+        <div>
+          <p class="ops-eyebrow">Adaptive routing</p>
+          <h2 id="voiceTitle">Voice balance</h2>
+        </div>
+      </div>
+      <div class="voice-balance" id="voiceBalance"></div>
+    </section>
+
+    <section class="ops-band" aria-labelledby="failureTitle">
+      <div class="ops-section-heading">
+        <div>
+          <p class="ops-eyebrow">Human review</p>
+          <h2 id="failureTitle">Recent exceptions</h2>
+        </div>
+      </div>
+      <div class="failure-list" id="failureList"></div>
+    </section>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="/static/js/admin.js?v=ops-1"></script>
+{% endblock %}

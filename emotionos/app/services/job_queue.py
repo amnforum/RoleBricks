@@ -34,6 +34,14 @@ class PriorityJobQueue:
     async def enqueue(self, job_id: uuid.UUID, *, priority: int, force: bool = False) -> None:
         await self.queue.put((priority, next(self.counter), job_id, force))
 
+    @property
+    def depth(self) -> int:
+        return self.queue.qsize()
+
+    @property
+    def active_workers(self) -> int:
+        return sum(not worker.done() for worker in self.workers)
+
     async def _worker(self) -> None:
         while True:
             _, _, job_id, force = await self.queue.get()

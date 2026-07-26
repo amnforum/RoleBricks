@@ -1322,3 +1322,20 @@ body[data-page="worlds"] label > select {
     transition: none;
   }
 }
+
+
+.simulation-notice {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent);
+  background: rgba(238, 115, 31, 0.07);
+  color: #aeb6c2;
+  font-size: 0.69rem;
+  line-height: 1.5;
+}
+
+.ready-character .simulation-notice {
+  max-width: 34rem;
+  margin: 10px auto 14px;
+  text-align: left;
+}

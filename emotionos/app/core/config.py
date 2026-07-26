@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = Field(default="EmotionOS", alias="APP_NAME")
+    app_name: str = Field(default="RoleBricks", alias="APP_NAME")
     app_env: str = Field(default="development", alias="APP_ENV")
     app_host: str = Field(default="127.0.0.1", alias="APP_HOST")
     app_port: int = Field(default=8000, alias="APP_PORT")
@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     scene_retrieval_provider: str = Field(default="databricks", alias="SCENE_RETRIEVAL_PROVIDER")
     scene_worker_count: int = Field(default=2, alias="SCENE_WORKER_COUNT")
     scene_max_agents: int = Field(default=3, alias="SCENE_MAX_AGENTS")
+    scene_cache_ttl_minutes: int = Field(default=360, alias="SCENE_CACHE_TTL_MINUTES")
+    scene_stable_cache_ttl_minutes: int = Field(
+        default=10080,
+        alias="SCENE_STABLE_CACHE_TTL_MINUTES",
+    )
+    admin_email_allowlist: str = Field(default="", alias="ADMIN_EMAIL_ALLOWLIST")
 
     databricks_host: str = Field(default="", alias="DATABRICKS_HOST")
     databricks_serving_endpoint: str = Field(default="", alias="DATABRICKS_SERVING_ENDPOINT")
@@ -83,6 +89,8 @@ class Settings(BaseSettings):
         "sarvam_timeout_seconds",
         "scene_worker_count",
         "scene_max_agents",
+        "scene_cache_ttl_minutes",
+        "scene_stable_cache_ttl_minutes",
         "databricks_timeout_seconds",
     )
     @classmethod
@@ -188,6 +196,14 @@ class Settings(BaseSettings):
     @property
     def test_mode(self) -> bool:
         return self.app_env.strip().lower() == "test"
+
+    @property
+    def admin_emails(self) -> set[str]:
+        return {
+            value.strip().casefold()
+            for value in self.admin_email_allowlist.split(",")
+            if value.strip()
+        }
 
 
 @lru_cache
