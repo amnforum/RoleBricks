@@ -1,0 +1,59 @@
+command:
+  - python
+  - run.py
+
+env:
+  - name: APP_ENV
+    value: production
+  - name: APP_HOST
+    value: 0.0.0.0
+  - name: DEBUG
+    value: "false"
+  - name: AUTO_MIGRATE
+    value: "true"
+
+  - name: DATABASE_BACKEND
+    value: lakebase
+  - name: LAKEBASE_ENDPOINT_NAME
+    valueFrom: lakebase-db
+  - name: AUDIO_DATA_DIR
+    valueFrom: scene-audio
+
+  - name: SCENE_COMPILER_PROVIDER
+    value: databricks
+  - name: SCENE_RESEARCH_PROVIDER
+    value: openai
+  - name: SCENE_RETRIEVAL_PROVIDER
+    value: databricks
+  - name: SCENE_MAX_AGENTS
+    value: "3"
+  - name: SCENE_WORKER_COUNT
+    value: "2"
+  - name: DATABRICKS_SERVING_ENDPOINT
+    valueFrom: foundation-model
+  - name: DATABRICKS_AI_SEARCH_INDEX
+    valueFrom: scene-memory-index
+  - name: DATABRICKS_SQL_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: DATABRICKS_CATALOG
+    value: main
+  - name: DATABRICKS_SCHEMA
+    value: emotionos_worlds
+  - name: MLFLOW_EXPERIMENT_ID
+    valueFrom: mlflow-experiment
+  - name: MLFLOW_TRACKING_URI
+    value: databricks
+
+  - name: OPENAI_API_KEY
+    valueFrom: openai-key
+  - name: SARVAM_API_KEY
+    valueFrom: sarvam-key
+  - name: HF_TOKEN
+    valueFrom: hf-token
+  - name: HF_SPACE_ID
+    value: madteddy/emotionos-inference
+  - name: HF_SPACE_API_NAME
+    value: /generate
+
+  - name: VOICE_PROVIDER
+    value: adaptive

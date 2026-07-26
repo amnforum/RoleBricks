@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}EmotionOS | Living Scenes{% endblock %}
+{% block page_id %}worlds{% endblock %}
+{% block styles %}
+  <link rel="stylesheet" href="/static/css/worlds.css?v=living-scenes-2">
+{% endblock %}
+{% block content %}
+<div class="world-app" id="worldApp">
+  <nav class="scene-progress" aria-label="Scene progress">
+    <span class="is-active" data-scene-step="describe"><i>1</i>Describe</span>
+    <span data-scene-step="blueprint"><i>2</i>Review</span>
+    <span data-scene-step="preparing"><i>3</i>Prepare</span>
+    <span data-scene-step="live"><i>4</i>Enter</span>
+  </nav>
+
+  <section class="world-view scene-start" id="sceneStart">
+    <div class="start-copy">
+      <p class="world-eyebrow">Living AI scenes</p>
+      <h1>Step into any situation.</h1>
+      <p>Describe who you want to be, who should be there, and what you want to achieve.</p>
+    </div>
+    <form class="scene-prompt" id="scenePromptForm">
+      <label for="scenePrompt">Your situation</label>
+      <textarea
+        id="scenePrompt"
+        rows="6"
+        minlength="20"
+        maxlength="5000"
+        placeholder="I have an interview tomorrow. I want to practise as the candidate with a demanding interviewer who knows the company and challenges weak answers."
+        required
+      ></textarea>
+      <div class="prompt-actions">
+        <button class="icon-control" type="button" id="dictateScene" aria-label="Describe by voice" title="Describe by voice">
+          <i data-lucide="mic"></i>
+        </button>
+        <span id="promptCount">0 / 5000</span>
+        <button class="primary scene-create" type="submit">
+          Create scene
+          <i data-lucide="arrow-right"></i>
+        </button>
+      </div>
+    </form>
+    <p class="runtime-notice is-hidden" id="runtimeNotice" role="status"></p>
+    <div class="recent-scenes is-hidden" id="recentScenes">
+      <div class="recent-heading">
+        <h2>Continue a scene</h2>
+      </div>
+      <div id="recentSceneList"></div>
+    </div>
+  </section>
+
+  <section class="world-view is-hidden" id="blueprintView" aria-labelledby="blueprintTitle">
+    <header class="view-heading blueprint-heading">
+      <div>
+        <p class="world-eyebrow">Scene blueprint</p>
+        <h1 id="blueprintTitle">Review the setup.</h1>
+        <p id="blueprintSummary"></p>
+      </div>
+      <div class="version-control">
+        <label for="versionSelect">Blueprint</label>
+        <select id="versionSelect"></select>
+        <button class="icon-control" type="button" id="revertVersion" aria-label="Revert to selected blueprint" title="Revert to selected blueprint">
+          <i data-lucide="history"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="blueprint-layout">
+      <div class="blueprint-main">
+        <section class="plain-section" aria-labelledby="yourRoleTitle">
+          <div class="section-heading">
+            <span>01</span>
+            <div>
+              <h2 id="yourRoleTitle">Your role</h2>
+              <p>Make sure the scene knows who you are and what success means.</p>
+            </div>
+          </div>
+          <div class="field-grid role-grid">
+            <label>Name
+              <input id="userRoleName" maxlength="120">
+            </label>
+            <label>Role
+              <input id="userRole" maxlength="240">
+            </label>
+          </div>
+          <label>Objective
+            <textarea id="userObjective" rows="3" maxlength="500"></textarea>
+          </label>
+        </section>
+
+        <section class="plain-section" aria-labelledby="castTitle">
+          <div class="section-heading">
+            <span>02</span>
+            <div>
+              <h2 id="castTitle">AI cast</h2>
+              <p id="castCount">Choose up to three characters.</p>
+            </div>
+          </div>
+          <div class="cast-list" id="castList"></div>
+        </section>
+      </div>
+
+      <aside class="scene-settings" aria-labelledby="sceneSettingsTitle">
+        <div class="section-heading compact">
+          <span>03</span>
+          <div>
+            <h2 id="sceneSettingsTitle">Scene direction</h2>
+          </div>
+        </div>
+        <label>Setting
+          <textarea id="sceneSetting" rows="4" maxlength="1000"></textarea>
+        </label>
+        <label>Stakes
+          <textarea id="sceneStakes" rows="4" maxlength="1000"></textarea>
+        </label>
+        <fieldset>
+          <legend>Pressure</legend>
+          <div class="pressure-control" id="pressureControl">
+            <label><input type="radio" name="pressure" value="supportive"><span>Supportive</span></label>
+            <label><input type="radio" name="pressure" value="realistic"><span>Realistic</span></label>
+            <label><input type="radio" name="pressure" value="high_pressure"><span>High pressure</span></label>
+          </div>
+        </fieldset>
+        <p class="cost-note"><i data-lucide="shield-check"></i>Research, Persona work, and voices begin only after you confirm.</p>
+      </aside>
+    </div>
+
+    <footer class="blueprint-actions">
+      <button type="button" id="discardBlueprint">Start over</button>
+      <div>
+        <span id="blueprintSaveState">Not prepared yet</span>
+        <button type="button" id="saveBlueprint">Save</button>
+        <button class="primary" type="button" id="buildScene">
+          Build this scene
+          <i data-lucide="sparkles"></i>
+        </button>
+      </div>
+    </footer>
+  </section>
+
+  <section class="world-view preparation-view is-hidden" id="preparationView" aria-labelledby="preparationTitle">
+    <div class="preparation-copy">
+      <p class="world-eyebrow">Preparing your world</p>
+      <h1 id="preparationTitle">Building the people behind the voices.</h1>
+      <p id="preparationMessage">The confirmed blueprint is now being researched and compiled.</p>
+    </div>
+    <div class="preparation-meter">
+      <div><span id="preparationStage">Queued</span><strong id="preparationPercent">0%</strong></div>
+      <div class="meter-track"><i id="preparationBar"></i></div>
+    </div>
+    <ol class="pipeline-stages" id="pipelineStages">
+      <li data-stage="resolving_scene"><i data-lucide="search"></i><span>Resolve the scene and people</span></li>
+      <li data-stage="compiling_personas"><i data-lucide="brain"></i><span>Build knowledge and Personas</span></li>
+      <li data-stage="preparing_voices"><i data-lucide="audio-lines"></i><span>Shape language, accent, and voice</span></li>
+      <li data-stage="initializing_memory"><i data-lucide="database"></i><span>Open memory and relationships</span></li>
+      <li data-stage="ready"><i data-lucide="check"></i><span>Scene ready</span></li>
+    </ol>
+    <div class="preparation-error is-hidden" id="preparationError">
+      <p id="preparationErrorText"></p>
+      <button type="button" id="returnToBlueprint">Review blueprint</button>
+    </div>
+  </section>
+
+  <section class="world-view ready-view is-hidden" id="readyView" aria-labelledby="readyTitle">
+    <header class="view-heading">
+      <div>
+        <p class="world-eyebrow">Scene ready</p>
+        <h1 id="readyTitle">Your characters are waiting.</h1>
+        <p id="readySummary"></p>
+      </div>
+      <button class="evidence-button" type="button" data-open-evidence>
+        <i data-lucide="library"></i>
+        Evidence
+      </button>
+    </header>
+    <div class="ready-cast" id="readyCast"></div>
+    <div class="ready-entry">
+      <div>
+        <span>You are entering as</span>
+        <strong id="readyUserRole"></strong>
+      </div>
+      <button class="primary enter-button" type="button" id="enterScene">
+        Enter scene
+        <i data-lucide="door-open"></i>
+      </button>
+    </div>
+  </section>
+
+  <section class="world-view live-view is-hidden" id="liveView" aria-labelledby="liveTitle">
+    <header class="live-heading">
+      <div>
+        <p class="world-eyebrow" id="liveStatus">Live scene</p>
+        <h1 id="liveTitle"></h1>
+      </div>
+      <div class="live-actions">
+        <button class="icon-control" type="button" data-open-evidence aria-label="Open evidence" title="Open evidence">
+          <i data-lucide="library"></i>
+        </button>
+        <button class="icon-control" type="button" id="pauseScene" aria-label="Pause scene" title="Pause scene">
+          <i data-lucide="pause"></i>
+        </button>
+        <button type="button" id="completeScene">End scene</button>
+      </div>
+    </header>
+    <div class="live-stage">
+      <aside class="live-cast" id="liveCast"></aside>
+      <div class="conversation">
+        <div class="transcript" id="sceneTranscript" aria-live="polite"></div>
+        <form class="turn-composer" id="turnForm">
+          <textarea id="turnText" rows="2" maxlength="4000" placeholder="Respond in your own words..." required></textarea>
+          <div class="composer-actions">
+            <div class="voice-wave" id="voiceWave" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <button class="mic-button" type="button" id="recordTurn" aria-label="Speak" title="Speak">
+              <i data-lucide="mic"></i>
+            </button>
+            <button class="primary send-turn" type="submit" aria-label="Send response" title="Send response">
+              <i data-lucide="arrow-up"></i>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="world-view after-view is-hidden" id="afterView" aria-labelledby="afterTitle">
+    <p class="world-eyebrow">Scene complete</p>
+    <h1 id="afterTitle">This world remembers.</h1>
+    <p id="afterSummary"></p>
+    <div class="remembered-cast" id="rememberedCast"></div>
+    <div class="after-actions">
+      <button type="button" id="newScene">Create another scene</button>
+      <button class="primary" type="button" id="resumeScene">
+        Resume this scene
+        <i data-lucide="rotate-ccw"></i>
+      </button>
+    </div>
+  </section>
+</div>
+
+<dialog class="evidence-drawer" id="evidenceDrawer">
+  <div class="drawer-heading">
+    <div>
+      <p class="world-eyebrow">Grounding</p>
+      <h2>Evidence used in this scene</h2>
+    </div>
+    <button class="icon-control" type="button" id="closeEvidence" aria-label="Close evidence" title="Close evidence">
+      <i data-lucide="x"></i>
+    </button>
+  </div>
+  <div id="evidenceList"></div>
+</dialog>
+{% endblock %}
+{% block scripts %}
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="/static/js/worlds.js?v=living-scenes-1"></script>
+{% endblock %}

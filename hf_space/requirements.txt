@@ -1,0 +1,16 @@
+gradio==6.8.0
+numpy>=1.26,<2.0
+soundfile>=0.12,<1.0
+librosa==0.11.0
+torch==2.9.1
+torchaudio==2.9.1
+s3tokenizer
+transformers==5.2.0
+diffusers==0.29.0
+resemble-perth @ git+https://github.com/resemble-ai/Perth.git@master
+conformer==0.3.2
+safetensors==0.5.3
+spacy-pkuseg
+pykakasi==2.3.0
+pyloudnorm
+omegaconf

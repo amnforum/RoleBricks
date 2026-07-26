@@ -1,0 +1,186 @@
+bundle:
+  name: emotionos-worlds
+  engine: direct
+  databricks_cli_version: ">=1.4.0"
+
+variables:
+  catalog:
+    description: Unity Catalog catalog used by EmotionOS
+    default: main
+  schema:
+    description: Unity Catalog schema used by EmotionOS
+    default: emotionos_worlds
+  sql_warehouse_id:
+    description: Existing serverless SQL warehouse ID
+  foundation_model_endpoint:
+    description: Existing Databricks chat model serving endpoint
+  embedding_model_endpoint:
+    description: Existing Databricks embedding endpoint
+    default: databricks-gte-large-en
+  secret_scope:
+    description: Scope containing openai-api-key, sarvam-api-key, and hf-token
+    default: emotionos-worlds
+
+resources:
+  volumes:
+    scene_audio:
+      name: scene_audio
+      catalog_name: ${var.catalog}
+      schema_name: ${var.schema}
+      volume_type: MANAGED
+      comment: Persistent generated scene audio
+
+  experiments:
+    scene_traces:
+      name: /Shared/emotionos-worlds-traces
+
+  postgres_projects:
+    scene_state_project:
+      project_id: emotionos-worlds
+      display_name: EmotionOS Worlds
+      pg_version: 17
+      history_retention_duration: 604800s
+      default_endpoint_settings:
+        autoscaling_limit_min_cu: 0.5
+        autoscaling_limit_max_cu: 0.5
+        suspend_timeout_duration: 300s
+
+  postgres_branches:
+    scene_state_branch:
+      parent: ${resources.postgres_projects.scene_state_project.name}
+      branch_id: production
+      no_expiry: true
+      replace_existing: true
+
+  postgres_roles:
+    scene_owner_role:
+      parent: ${resources.postgres_branches.scene_state_branch.name}
+      role_id: scene-owner
+      postgres_role: scene_owner
+      auth_method: NO_LOGIN
+
+  postgres_databases:
+    scene_state_database:
+      parent: ${resources.postgres_branches.scene_state_branch.name}
+      database_id: emotionos
+      postgres_database: emotionos
+      role: ${resources.postgres_roles.scene_owner_role.id}
+
+  postgres_endpoints:
+    scene_state_endpoint:
+      parent: ${resources.postgres_branches.scene_state_branch.name}
+      endpoint_id: primary
+      endpoint_type: ENDPOINT_TYPE_READ_WRITE
+      autoscaling_limit_min_cu: 0.5
+      autoscaling_limit_max_cu: 0.5
+      suspend_timeout_duration: 300s
+      group:
+        min: 1
+        max: 1
+      replace_existing: true
+
+  pipelines:
+    scene_memory_pipeline:
+      name: emotionos-scene-memory
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      continuous: false
+      development: false
+      channel: CURRENT
+      edition: CORE
+      libraries:
+        - file:
+            path: ./databricks/pipelines/scene_memory_pipeline.py
+      configuration:
+        emotionos.source_table: ${var.catalog}.${var.schema}.scene_memory_search
+
+  vector_search_endpoints:
+    scene_memory_endpoint:
+      name: emotionos-scene-memory
+      endpoint_type: STANDARD
+
+  vector_search_indexes:
+    scene_memory_index:
+      name: ${var.catalog}.${var.schema}.scene_memory_search_index
+      endpoint_name: ${resources.vector_search_endpoints.scene_memory_endpoint.name}
+      primary_key: record_id
+      index_type: DELTA_SYNC
+      index_subtype: HYBRID
+      delta_sync_index_spec:
+        source_table: ${var.catalog}.${var.schema}.scene_memory_search
+        pipeline_type: TRIGGERED
+        columns_to_sync:
+          - record_id
+          - scene_id
+          - character_key
+          - record_type
+          - content
+          - title
+          - url
+          - freshness
+          - importance
+          - visibility
+          - updated_at
+        embedding_source_columns:
+          - name: content
+            embedding_model_endpoint_name: ${var.embedding_model_endpoint}
+
+  apps:
+    emotionos:
+      name: emotionos-worlds
+      description: Living AI scenes with durable memory and expressive voice
+      source_code_path: .
+      resources:
+        - name: lakebase-db
+          postgres:
+            branch: ${resources.postgres_branches.scene_state_branch.name}
+            database: ${resources.postgres_databases.scene_state_database.name}
+            permission: CAN_CONNECT_AND_CREATE
+        - name: foundation-model
+          serving_endpoint:
+            name: ${var.foundation_model_endpoint}
+            permission: CAN_QUERY
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: CAN_USE
+        - name: mlflow-experiment
+          experiment:
+            experiment_id: ${resources.experiments.scene_traces.id}
+            permission: CAN_EDIT
+        - name: scene-memory-index
+          uc_securable:
+            securable_full_name: ${resources.vector_search_indexes.scene_memory_index.name}
+            securable_type: TABLE
+            permission: SELECT
+        - name: scene-memory-table
+          uc_securable:
+            securable_full_name: ${var.catalog}.${var.schema}.scene_memory_search
+            securable_type: TABLE
+            permission: MODIFY
+        - name: scene-audio
+          uc_securable:
+            securable_full_name: ${var.catalog}.${var.schema}.${resources.volumes.scene_audio.name}
+            securable_type: VOLUME
+            permission: WRITE_VOLUME
+        - name: openai-key
+          secret:
+            scope: ${var.secret_scope}
+            key: openai-api-key
+            permission: READ
+        - name: sarvam-key
+          secret:
+            scope: ${var.secret_scope}
+            key: sarvam-api-key
+            permission: READ
+        - name: hf-token
+          secret:
+            scope: ${var.secret_scope}
+            key: hf-token
+            permission: READ
+
+targets:
+  dev:
+    mode: development
+    default: true

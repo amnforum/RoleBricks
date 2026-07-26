@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}EmotionOS Error{% endblock %}
+{% block page_id %}error{% endblock %}
+{% block content %}
+<section class="panel error-panel">
+  <p class="eyebrow">Error</p>
+  <h1>{{ message }}</h1>
+  {% if details %}<pre>{{ details }}</pre>{% endif %}
+  <a class="button" href="/">Back to scenes</a>
+</section>
+{% endblock %}
