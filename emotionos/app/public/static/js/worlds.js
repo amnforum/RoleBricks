@@ -684,7 +684,7 @@ async function submitWorldTurn(event) {
     const previousLastId = worldState.scene.turns.at(-1)?.id;
     const scene = await api(`/api/worlds/${worldState.scene.id}/turns`, {
       method: 'POST',
-      body: JSON.stringify({ text })
+      body: JSON.stringify({ text, voice_mode: worldState.voiceMode })
     });
     worldState.scene = scene;
     textInput.value = '';
@@ -692,6 +692,8 @@ async function submitWorldTurn(event) {
     const latest = scene.turns.at(-1);
     if (latest?.id !== previousLastId && latest?.audio_url) {
       playWorldAudio(latest.audio_url, latest.speaker_key);
+    } else if (latest?.id !== previousLastId && worldState.voiceMode) {
+      speakWorldText(latest.text, latest.speaker_key);
     } else if (latest?.audio_data?.status === 'failed') {
       toast(`Voice was not generated: ${latest.audio_data.error}`);
     }
@@ -781,6 +783,31 @@ function renderEvidence(scene) {
   `).join('');
 }
 
+function speakWorldText(text, speakerKey = '') {
+  if (!text || !('speechSynthesis' in window)) {
+    scheduleAutoListen();
+    return;
+  }
+  stopWorldAudio();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = navigator.language || 'en-IN';
+  utterance.rate = 1.08;
+  utterance.pitch = 1;
+  worldState.audio = { pause: () => speechSynthesis.cancel(), currentTime: 0 };
+  if (speakerKey) {
+    $('[data-live-agent]').forEach((element) => {
+      element.classList.toggle('is-speaking', element.dataset.liveAgent === speakerKey);
+    });
+  }
+  utterance.onend = utterance.onerror = () => {
+    worldState.audio = null;
+    $('[data-live-agent]').forEach((element) => element.classList.remove('is-speaking'));
+    scheduleAutoListen();
+  };
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utterance);
+}
+
 function playWorldAudio(url, speakerKey = '') {
   if (!url) return;
   stopWorldAudio();
@@ -823,15 +850,27 @@ function startSceneDictation() {
   const recognition = new Recognition();
   recognition.lang = navigator.language || 'en-IN';
   recognition.interimResults = true;
+  recognition.continuous = false;
   const button = $('#dictateScene');
+  const prompt = $('#scenePrompt');
+  const baseText = prompt.value.trim();
+  let finalText = '';
   button.classList.add('is-recording');
   recognition.onresult = (event) => {
-    const text = Array.from(event.results).map((result) => result[0].transcript).join(' ');
-    $('#scenePrompt').value = text;
+    let interim = '';
+    for (const result of event.results) {
+      if (result.isFinal) finalText += result[0].transcript + ' ';
+      else interim += result[0].transcript;
+    }
+    prompt.value = [baseText, finalText || interim].filter(Boolean).join(' ').trim();
     updatePromptCount();
   };
   recognition.onerror = () => toast('I could not hear that clearly.');
-  recognition.onend = () => button.classList.remove('is-recording');
+  recognition.onend = () => {
+    button.classList.remove('is-recording');
+    updatePromptCount();
+    prompt.focus();
+  };
   recognition.start();
 }
 
@@ -1081,4 +1120,5 @@ if (page === 'worlds') {
     setWorldView('describe');
   });
 }
+
 

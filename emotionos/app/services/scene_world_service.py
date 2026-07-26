@@ -833,19 +833,26 @@ class SceneWorldService:
         audio_path: str | None = None
         audio_data: dict[str, Any]
         voice_started = time.perf_counter()
-        try:
-            audio_path, audio_data = await self._generate_agent_audio(
-                scene_id=scene.id,
-                character=character,
-                text=action.spoken_response,
-                category="turns",
-            )
-        except Exception as exc:
+        if payload.voice_mode:
             audio_data = {
-                "status": "failed",
-                "error": str(exc),
-                "fallback_used": False,
+                "status": "browser_speech",
+                "route_provider": "browser",
+                "latency_strategy": "text_first_voice_mode",
             }
+        else:
+            try:
+                audio_path, audio_data = await self._generate_agent_audio(
+                    scene_id=scene.id,
+                    character=character,
+                    text=action.spoken_response,
+                    category="turns",
+                )
+            except Exception as exc:
+                audio_data = {
+                    "status": "failed",
+                    "error": str(exc),
+                    "fallback_used": False,
+                }
         voice_ms = round((time.perf_counter() - voice_started) * 1000)
         total_latency_ms = round((time.perf_counter() - turn_started) * 1000)
 
@@ -1666,6 +1673,7 @@ class SceneWorldService:
             accent=accent,
             style="conversational",
         )
+
 
 
 

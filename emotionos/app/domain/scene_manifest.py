@@ -177,6 +177,7 @@ class SceneConfirmRequest(BaseModel):
 
 class SceneTurnCreate(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+    voice_mode: bool = False
 
     @field_validator("text")
     @classmethod
@@ -307,3 +308,6 @@ class SceneBuildQueued(BaseModel):
 class SceneRevertRequest(BaseModel):
     expected_version: int = Field(ge=1)
     target_version: int = Field(ge=1)
+
+
+
