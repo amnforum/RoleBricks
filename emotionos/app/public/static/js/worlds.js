@@ -985,50 +985,52 @@ function startAutoVoiceTurn() {
   let shouldSubmit = false;
   setTurnRecordingUi('recording');
   toast('Listening. Speak naturally; RoleBricks sends after a clear pause.');
+  const currentVoiceText = () => [finalText, interimText]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   const queueSubmit = () => {
     window.clearTimeout(submitTimer);
     submitTimer = window.setTimeout(() => {
       if (!worldState.voiceMode || worldState.turnSubmitting) return;
-      const cleanFinal = finalText.replace(/\s+/g, ' ').trim();
-      if (!isMeaningfulVoiceText(cleanFinal)) {
+      const text = currentVoiceText() || $('#turnText').value.trim();
+      if (!isMeaningfulVoiceText(text)) {
         clearNoiseTurnText(finalText, interimText);
         return;
       }
-      $('#turnText').value = cleanFinal;
+      $('#turnText').value = text;
       shouldSubmit = true;
       recognition.stop();
     }, voiceSilenceMs);
   };
   recognition.onresult = (event) => {
     interimText = '';
-    let heardFinal = false;
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
       const result = event.results[index];
       const transcript = result[0].transcript || '';
-      if (result.isFinal) {
-        finalText += transcript + ' ';
-        heardFinal = true;
-      } else {
-        interimText += transcript;
-      }
+      if (result.isFinal) finalText += transcript + ' ';
+      else interimText += transcript;
     }
-    const visibleText = [finalText, interimText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    const visibleText = currentVoiceText();
     $('#turnText').value = visibleText;
-    if (heardFinal && isMeaningfulVoiceText(finalText)) queueSubmit();
-    else if (heardFinal) clearNoiseTurnText(finalText, interimText);
+    if (isMeaningfulVoiceText(visibleText)) queueSubmit();
+    else clearNoiseTurnText(finalText, interimText);
   };
   recognition.onerror = () => {
     window.clearTimeout(submitTimer);
     worldState.recognition = null;
     setTurnRecordingUi('idle');
-    scheduleAutoListen();
+    const text = $('#turnText').value.trim();
+    if (worldState.voiceMode && isMeaningfulVoiceText(text) && !worldState.turnSubmitting) $('#turnForm').requestSubmit();
+    else scheduleAutoListen();
   };
   recognition.onend = () => {
     window.clearTimeout(submitTimer);
     worldState.recognition = null;
     const text = $('#turnText').value.trim();
     setTurnRecordingUi('idle');
-    if (worldState.voiceMode && text && !worldState.turnSubmitting && shouldSubmit && isMeaningfulVoiceText(text)) $('#turnForm').requestSubmit();
+    if (worldState.voiceMode && text && !worldState.turnSubmitting && (shouldSubmit || isMeaningfulVoiceText(text))) $('#turnForm').requestSubmit();
     else {
       if (!isMeaningfulVoiceText(text)) $('#turnText').value = '';
       if (worldState.voiceMode) scheduleAutoListen();
