@@ -31,6 +31,8 @@ class SceneRetriever(Protocol):
 
     async def index(self, records: list[dict[str, Any]]) -> None: ...
 
+    async def purge_scene(self, scene_id: uuid.UUID, *, layers: list[str] | None = None) -> None: ...
+
 
 class DatabaseSceneRetriever:
     """Short-context retrieval for tests and explicit local development."""
@@ -51,6 +53,9 @@ class DatabaseSceneRetriever:
 
     async def index(self, records: list[dict[str, Any]]) -> None:
         del records
+
+    async def purge_scene(self, scene_id: uuid.UUID, *, layers: list[str] | None = None) -> None:
+        del scene_id, layers
 
 
 class DatabricksAISearchRetriever:
@@ -136,6 +141,25 @@ class DatabricksAISearchRetriever:
                 exc.details,
             )
 
+    async def purge_scene(self, scene_id: uuid.UUID, *, layers: list[str] | None = None) -> None:
+        if not self.settings.databricks_sql_warehouse_id.strip():
+            return
+        if layers:
+            layer_values = ", ".join(f"'{layer}'" for layer in layers if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", layer))
+            if not layer_values:
+                return
+            predicate = f"scene_id = :scene_id AND record_type IN ({layer_values})"
+        else:
+            predicate = "scene_id = :scene_id"
+        table = f"{self.settings.databricks_catalog}.{self.settings.databricks_schema}.scene_memory_search"
+        await self._execute_sql_statement(
+            f"DELETE FROM {table} WHERE {predicate}",
+            [{"name": "scene_id", "value": str(scene_id), "type": "STRING"}],
+        )
+        try:
+            await self._sync_index()
+        except ExternalProviderError as exc:
+            logger.warning("Databricks AI Search sync deferred after scene purge: %s", exc.details)
     async def _sync_index(self) -> None:
         from databricks.sdk import WorkspaceClient
 
@@ -165,6 +189,58 @@ class DatabricksAISearchRetriever:
                 details={"reason": str(exc)},
             ) from exc
 
+    async def _execute_sql_statement(self, statement: str, parameters: list[dict[str, Any]]) -> None:
+        from databricks.sdk import WorkspaceClient
+
+        try:
+            workspace = WorkspaceClient()
+            headers = dict(workspace.config.authenticate())
+            host = (self.settings.databricks_host or workspace.config.host or "").rstrip("/")
+            if host and "://" not in host:
+                host = f"https://{host}"
+        except Exception as exc:
+            raise ProviderConfigurationError(
+                "Databricks authentication failed while updating scene memory.",
+                details={"provider": "databricks", "reason": str(exc)},
+            ) from exc
+        if not host:
+            raise ProviderConfigurationError("DATABRICKS_HOST is missing.")
+        payload = {
+            "warehouse_id": self.settings.databricks_sql_warehouse_id,
+            "catalog": self.settings.databricks_catalog,
+            "schema": self.settings.databricks_schema,
+            "statement": statement,
+            "parameters": parameters,
+            "wait_timeout": "30s",
+            "on_wait_timeout": "CONTINUE",
+        }
+        headers["Content-Type"] = "application/json"
+        async with httpx.AsyncClient(timeout=self.settings.databricks_timeout_seconds) as client:
+            try:
+                response = await client.post(f"{host}/api/2.0/sql/statements", headers=headers, json=payload)
+                response.raise_for_status()
+                result = response.json()
+                deadline = asyncio.get_running_loop().time() + self.settings.databricks_timeout_seconds
+                while (result.get("status") or {}).get("state") in {"PENDING", "RUNNING"}:
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise ExternalProviderError("Databricks memory update timed out.")
+                    await asyncio.sleep(0.5)
+                    response = await client.get(f"{host}/api/2.0/sql/statements/{result['statement_id']}", headers=headers)
+                    response.raise_for_status()
+                    result = response.json()
+            except httpx.HTTPStatusError as exc:
+                raise ExternalProviderError(
+                    "Databricks memory update failed.",
+                    details={"status": exc.response.status_code, "response": exc.response.text[:1200]},
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise ExternalProviderError(
+                    "Databricks memory update could not be completed.",
+                    details={"reason": str(exc)},
+                ) from exc
+        status = result.get("status") or {}
+        if status.get("state") != "SUCCEEDED":
+            raise ExternalProviderError("Databricks memory update did not succeed.", details={"status": status})
     async def _merge_records(self, records: list[dict[str, Any]]) -> None:
         from databricks.sdk import WorkspaceClient
 
@@ -375,3 +451,7 @@ def build_scene_retriever(settings: Settings) -> SceneRetriever:
             raise RuntimeError("Database-only scene retrieval is limited to test and development")
         return DatabaseSceneRetriever()
     return DatabricksAISearchRetriever(settings)
+
+
+
+

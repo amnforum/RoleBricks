@@ -149,7 +149,7 @@ class DatabricksSceneCompiler:
         data, usage = await self.client.generate_json(
             system_prompt=system,
             user_prompt=json.dumps(payload, ensure_ascii=False),
-            max_tokens=700,
+            max_tokens=420,
         )
         data["character_key"] = character.key
         return CharacterAction.model_validate(data), usage
@@ -337,4 +337,5 @@ def build_scene_compiler(settings: Settings) -> SceneCompiler:
             raise RuntimeError("The rules scene compiler is limited to test and development environments")
         return RuleBasedSceneCompiler()
     return DatabricksSceneCompiler(settings)
+
 

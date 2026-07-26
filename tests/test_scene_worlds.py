@@ -30,6 +30,14 @@ def _wait_until_ready(client, scene_id: str):
     raise AssertionError(f"Scene did not become ready: {latest}")
 
 
+
+def test_random_text_is_rejected_before_scene_compile(client):
+    response = client.post(
+        "/api/worlds/draft",
+        json={"prompt": "blue mango seven cloud table quickly nothing useful", "locale": "en-IN"},
+    )
+    assert response.status_code == 422
+    assert "Describe a real scene goal" in response.json()["error"]
 def test_scene_draft_is_editable_and_does_not_start_expensive_work(client):
     scene = _create_scene(client)
 
@@ -245,3 +253,4 @@ def test_scene_management_actions_keep_or_remove_the_right_records(client):
     assert deleted.status_code == 204, deleted.text
     missing = client.get(f"/api/worlds/{scene_id}")
     assert missing.status_code == 404
+

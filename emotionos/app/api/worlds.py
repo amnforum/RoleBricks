@@ -53,12 +53,12 @@ def get_world(
 
 
 @router.delete("/worlds/{scene_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_world(
+async def delete_world(
     scene_id: uuid.UUID,
     db: Session = Depends(get_db),
     service: SceneWorldService = Depends(world_service),
 ):
-    service.delete_scene(db, scene_id)
+    await service.delete_scene(db, scene_id)
     return None
 
 
@@ -198,4 +198,6 @@ def get_agent_sample(
         media_type="audio/wav",
         filename="emotionos-character-sample.wav",
     )
+
+
 

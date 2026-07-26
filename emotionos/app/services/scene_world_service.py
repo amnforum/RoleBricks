@@ -85,6 +85,7 @@ class SceneWorldService:
         self.queue = queue
 
     async def create_draft(self, db: Session, payload: SceneDraftCreate) -> WorldSceneRead:
+        self._validate_scene_prompt(payload.prompt)
         with self.telemetry.span(
             "scene.compile",
             span_type="CHAIN",
@@ -527,7 +528,7 @@ class SceneWorldService:
         db.commit()
         return self.read_scene(db, scene.id)
 
-    def delete_scene(self, db: Session, scene_id: uuid.UUID) -> None:
+    async def delete_scene(self, db: Session, scene_id: uuid.UUID) -> None:
         scene = db.scalar(self._scene_query().where(Scene.id == scene_id))
         if scene is None or not scene.raw_prompt:
             raise NotFoundError("Scene was not found")
@@ -537,7 +538,14 @@ class SceneWorldService:
             self._delete_stored_audio((agent.voice_profile or {}).get("sample_audio_path"))
         db.delete(scene)
         db.commit()
-
+        try:
+            await self.retriever.purge_scene(scene_id)
+        except Exception as exc:
+            self.telemetry.log_event(
+                "scene.databricks_purge_deferred",
+                scene_id=str(scene_id),
+                error=str(exc),
+            )
     def clear_history(self, db: Session, scene_id: uuid.UUID) -> WorldSceneRead:
         scene = db.scalar(self._scene_query().where(Scene.id == scene_id))
         if scene is None or not scene.raw_prompt:
@@ -924,6 +932,24 @@ class SceneWorldService:
         db.commit()
         return self.read_scene(db, scene.id)
 
+    @staticmethod
+    def _validate_scene_prompt(prompt: str) -> None:
+        words = re.findall(r"[A-Za-z\u0900-\u097F0-9']+", prompt)
+        unique_words = {word.casefold() for word in words if len(word) > 2}
+        scene_markers = re.search(
+            r"\b(scene|simulate|practice|interview|debate|meeting|court|case|role|mentor|coach|teacher|companion|detective|argument|conversation|talk|prepare|scenario|agent|character|persona|with|against|as)\b",
+            prompt,
+            re.IGNORECASE,
+        )
+        objective_markers = re.search(
+            r"\b(i want|i need|help me|make me|create|simulate|practice|prepare|interview|talk|argue|debate|learn|coach|teach|ask|respond|play)\b",
+            prompt,
+            re.IGNORECASE,
+        )
+        if len(words) < 8 or len(unique_words) < 6 or not (scene_markers and objective_markers):
+            raise ValidationError(
+                "Describe a real scene goal, your role, and who should respond. Example: 'I want to practice a fast interview with a witty Bollywood actor about an upcoming film.'"
+            )
     @staticmethod
     def _needs_fresh_research(text: str) -> bool:
         return bool(
@@ -1640,4 +1666,7 @@ class SceneWorldService:
             accent=accent,
             style="conversational",
         )
+
+
+
 

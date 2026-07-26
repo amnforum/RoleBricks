@@ -67,7 +67,7 @@ function scheduleAutoListen() {
     if (worldState.voiceMode && worldState.scene?.status === 'live' && !worldState.audio) {
       startAutoVoiceTurn();
     }
-  }, 650);
+  }, 120);
 }
 
 function setWorldView(view) {
@@ -654,6 +654,21 @@ function renderLive(scene) {
   setWorldView('live');
 }
 
+function renderPendingUserTurn(text) {
+  const transcript = $('#sceneTranscript');
+  if (!transcript || !text) return;
+  const empty = transcript.querySelector('.empty-transcript');
+  if (empty) transcript.innerHTML = '';
+  const pending = document.createElement('article');
+  pending.className = 'turn is-user is-pending';
+  pending.innerHTML = `
+    <div class="turn-meta"><strong>You</strong><span>sending</span></div>
+    <p>${escapeHtml(text)}</p>
+  `;
+  transcript.appendChild(pending);
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
 async function submitWorldTurn(event) {
   event.preventDefault();
   const textInput = $('#turnText');
@@ -664,6 +679,7 @@ async function submitWorldTurn(event) {
   textInput.disabled = true;
   worldState.turnSubmitting = true;
   clearAutoListen();
+  renderPendingUserTurn(text);
   try {
     const previousLastId = worldState.scene.turns.at(-1)?.id;
     const scene = await api(`/api/worlds/${worldState.scene.id}/turns`, {
@@ -832,15 +848,21 @@ function startAutoVoiceTurn() {
   recognition.interimResults = true;
   recognition.continuous = false;
   let finalText = '';
+  let submitted = false;
   setTurnRecordingUi('recording');
-  toast('Listening. Speak naturally; RoleBricks will send when you pause.');
+  toast('Listening. Speak naturally; RoleBricks sends when you pause.');
   recognition.onresult = (event) => {
     let interim = '';
     for (const result of event.results) {
       if (result.isFinal) finalText += result[0].transcript + ' ';
       else interim += result[0].transcript;
     }
-    $('#turnText').value = (finalText || interim).trim();
+    const text = (finalText || interim).trim();
+    $('#turnText').value = text;
+    if (worldState.voiceMode && finalText.trim() && !submitted) {
+      submitted = true;
+      recognition.stop();
+    }
   };
   recognition.onerror = () => {
     worldState.recognition = null;
@@ -851,7 +873,7 @@ function startAutoVoiceTurn() {
     worldState.recognition = null;
     const text = $('#turnText').value.trim();
     setTurnRecordingUi('idle');
-    if (worldState.voiceMode && text) $('#turnForm').requestSubmit();
+    if (worldState.voiceMode && text && !worldState.turnSubmitting) $('#turnForm').requestSubmit();
     else if (worldState.voiceMode) scheduleAutoListen();
   };
   recognition.start();
@@ -879,6 +901,7 @@ function setTurnRecordingUi(state) {
 }
 
 async function toggleTurnRecording(autoStarted = false) {
+  if (worldState.audio) stopWorldAudio();
   if (worldState.recognition) {
     stopAutoVoiceTurn();
     return;

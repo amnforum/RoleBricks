@@ -1650,4 +1650,11 @@ body[data-page="worlds"] .page-shell {
   .transcript { padding: 16px 14px 18px; }
   .turn.is-user { width: 100%; }
 }
+.turn.is-pending {
+  opacity: 0.72;
+}
+
+.turn.is-pending .turn-meta span::after {
+  content: "...";
+}
 

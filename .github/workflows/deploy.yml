@@ -1,0 +1,63 @@
+name: Deploy RoleBricks
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: rolebricks-production
+  cancel-in-progress: false
+
+jobs:
+  vercel:
+    name: Vercel public app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install
+      - run: npm run build
+      - name: Deploy to Vercel production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel deploy --prod --yes --token "$VERCEL_TOKEN"
+
+  databricks:
+    name: Databricks app
+    runs-on: ubuntu-latest
+    needs: vercel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Validate bundle
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: >-
+          databricks bundle validate -t dev
+          --var "sql_warehouse_id=${{ secrets.DATABRICKS_SQL_WAREHOUSE_ID }}"
+          --var "foundation_model_endpoint=${{ secrets.DATABRICKS_FOUNDATION_MODEL_ENDPOINT }}"
+      - name: Deploy bundle
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: >-
+          databricks bundle deploy -t dev --auto-approve
+          --var "sql_warehouse_id=${{ secrets.DATABRICKS_SQL_WAREHOUSE_ID }}"
+          --var "foundation_model_endpoint=${{ secrets.DATABRICKS_FOUNDATION_MODEL_ENDPOINT }}"
+      - name: Restart app
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: >-
+          databricks bundle run -t dev emotionos
+          --var "sql_warehouse_id=${{ secrets.DATABRICKS_SQL_WAREHOUSE_ID }}"
+          --var "foundation_model_endpoint=${{ secrets.DATABRICKS_FOUNDATION_MODEL_ENDPOINT }}"
+
+
