@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     scene_research_provider: str = Field(default="openai", alias="SCENE_RESEARCH_PROVIDER")
     scene_retrieval_provider: str = Field(default="databricks", alias="SCENE_RETRIEVAL_PROVIDER")
     scene_worker_count: int = Field(default=2, alias="SCENE_WORKER_COUNT")
-    scene_max_agents: int = Field(default=3, alias="SCENE_MAX_AGENTS")
+    scene_max_agents: int = Field(default=5, alias="SCENE_MAX_AGENTS")
     scene_cache_ttl_minutes: int = Field(default=360, alias="SCENE_CACHE_TTL_MINUTES")
     scene_stable_cache_ttl_minutes: int = Field(
         default=10080,
@@ -143,8 +143,8 @@ class Settings(BaseSettings):
     @field_validator("scene_max_agents")
     @classmethod
     def mvp_scene_agent_limit(cls, value: int) -> int:
-        if value != 3:
-            raise ValueError("SCENE_MAX_AGENTS must remain 3 for this MVP")
+        if value > 5:
+            raise ValueError("SCENE_MAX_AGENTS can be at most 5 for this MVP")
         return value
 
     @field_validator("sarvam_sample_rate")

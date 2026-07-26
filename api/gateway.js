@@ -103,8 +103,9 @@ function routeFor(resourceValue, methodValue) {
     allowedMethod = 'POST';
     quota = 'expensive';
   } else if (parts[0] === 'worlds' && UUID_PATTERN.test(parts[1] || '')) {
-    if (parts.length === 2) allowedMethod = 'GET';
+    if (parts.length === 2) allowedMethod = method === 'DELETE' ? 'DELETE' : 'GET';
     if (parts.length === 3 && parts[2] === 'blueprint') allowedMethod = 'PATCH';
+    if (parts.length === 3 && ['history', 'memories'].includes(parts[2])) allowedMethod = 'DELETE';
     if (parts.length === 3 && ['revert', 'enter', 'pause', 'resume', 'complete'].includes(parts[2])) {
       allowedMethod = 'POST';
     }
@@ -128,6 +129,11 @@ function routeFor(resourceValue, methodValue) {
       UUID_PATTERN.test(parts[3]) &&
       parts[4] === 'sample'
     ) allowedMethod = 'GET';
+    if (
+      parts.length === 4 &&
+      parts[2] === 'sources' &&
+      UUID_PATTERN.test(parts[3])
+    ) allowedMethod = 'DELETE';
   }
 
   if (!allowedMethod) throw new GatewayError(404, 'Not found.', 'route_not_found');
@@ -293,7 +299,7 @@ export default async function handler(request, response) {
   try {
     if (request.method === 'OPTIONS') {
       response.statusCode = 204;
-      response.setHeader('allow', 'GET, HEAD, POST, PATCH, OPTIONS');
+      response.setHeader('allow', 'GET, HEAD, POST, PATCH, DELETE, OPTIONS');
       response.end();
       return;
     }

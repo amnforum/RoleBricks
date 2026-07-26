@@ -52,6 +52,44 @@ def get_world(
     return service.read_scene(db, scene_id)
 
 
+@router.delete("/worlds/{scene_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_world(
+    scene_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    service: SceneWorldService = Depends(world_service),
+):
+    service.delete_scene(db, scene_id)
+    return None
+
+
+@router.delete("/worlds/{scene_id}/history", response_model=WorldSceneRead)
+def clear_world_history(
+    scene_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    service: SceneWorldService = Depends(world_service),
+):
+    return service.clear_history(db, scene_id)
+
+
+@router.delete("/worlds/{scene_id}/memories", response_model=WorldSceneRead)
+def clear_world_memories(
+    scene_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    service: SceneWorldService = Depends(world_service),
+):
+    return service.clear_memories(db, scene_id)
+
+
+@router.delete("/worlds/{scene_id}/sources/{source_id}", response_model=WorldSceneRead)
+def delete_world_source(
+    scene_id: uuid.UUID,
+    source_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    service: SceneWorldService = Depends(world_service),
+):
+    return service.delete_source(db, scene_id, source_id)
+
+
 @router.patch("/worlds/{scene_id}/blueprint", response_model=WorldSceneRead)
 def update_blueprint(
     scene_id: uuid.UUID,

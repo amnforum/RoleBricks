@@ -139,8 +139,8 @@ class SceneManifest(BaseModel):
         keys = [character.key for character in self.ai_characters]
         if len(keys) != len(set(keys)):
             raise ValueError("AI character keys must be unique")
-        if len(self.selected_characters) > 3:
-            raise ValueError("A scene can contain at most three selected AI characters")
+        if len(self.selected_characters) > 5:
+            raise ValueError("A scene can contain at most five selected AI respondents")
         return self
 
     @property

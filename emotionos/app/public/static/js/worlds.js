@@ -387,13 +387,13 @@ function optionList(options, selected, titleCase = false) {
 
 function updateCastCount() {
   const selected = $$('[data-cast-selected]:checked').length;
-  $('#castCount').textContent = `${selected} of 3 selected. Additional recommendations remain available.`;
+  $('#castCount').textContent = `${selected} of 5 AI respondents selected. Human user is separate.`;
 }
 
 function toggleCastSelection(input) {
-  if (input.checked && $$('[data-cast-selected]:checked').length > 3) {
+  if (input.checked && $('[data-cast-selected]:checked').length > 5) {
     input.checked = false;
-    toast('This MVP supports up to three AI characters.');
+    toast('This MVP supports up to five AI respondents plus the human user.');
   }
   input.closest('.cast-row')?.classList.toggle('is-selected', input.checked);
   updateCastCount();
@@ -417,8 +417,8 @@ function collectBlueprint() {
     return character;
   });
   const selectedCount = characters.filter((character) => character.selected).length;
-  if (selectedCount < 1 || selectedCount > 3) {
-    throw new Error('Select between one and three AI characters.');
+  if (selectedCount < 1 || selectedCount > 5) {
+    throw new Error('Select between one and five AI respondents. The human user is separate.');
   }
   return {
     expected_version: scene.active_manifest_version,
@@ -589,8 +589,6 @@ async function enterWorldScene() {
     const scene = await api(`/api/worlds/${worldState.scene.id}/enter`, { method: 'POST' });
     worldState.scene = scene;
     renderLive(scene);
-    const opening = [...scene.turns].reverse().find((turn) => turn.speaker_type === 'agent' && turn.audio_url);
-    if (opening) playWorldAudio(opening.audio_url, opening.speaker_key);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -620,7 +618,9 @@ function renderLive(scene) {
     </div>
   `).join('');
 
-  $('#sceneTranscript').innerHTML = scene.turns.map((turn) => `
+  const transcript = $('#sceneTranscript');
+  const shouldStickToBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 96;
+  transcript.innerHTML = scene.turns.length ? scene.turns.map((turn) => `
     <article class="turn ${turn.speaker_type === 'user' ? 'is-user' : 'is-agent'}" data-turn-id="${turn.id}">
       <div class="turn-meta">
         <strong>${escapeHtml(turn.speaker_name)}</strong>
@@ -633,9 +633,8 @@ function renderLive(scene) {
         </button>
       ` : ''}
     </article>
-  `).join('');
-  const transcript = $('#sceneTranscript');
-  requestAnimationFrame(() => { transcript.scrollTop = transcript.scrollHeight; });
+  `).join('') : '<div class="empty-transcript">Speak or type first. The AI respondents will wait for you.</div>';
+  if (shouldStickToBottom) requestAnimationFrame(() => { transcript.scrollTop = transcript.scrollHeight; });
   worldState.lastRenderedTurnId = scene.turns.at(-1)?.id || null;
   setWorldView('live');
 }
@@ -739,12 +738,12 @@ function renderEvidence(scene) {
   const list = $('#evidenceList');
   if (!list) return;
   if (!scene.sources.length) {
-    list.innerHTML = '<p class="empty-evidence">This scene did not require fresh public sources. Canon and scene facts are stored separately from live research.</p>';
+    list.innerHTML = '<p class="empty-evidence">This scene did not require fresh public sources. Persona and user-provided facts remain separate from respondent evidence.</p>';
     return;
   }
   list.innerHTML = scene.sources.map((source) => `
     <a class="evidence-item" href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">
-      <span>${escapeHtml(source.freshness)}</span>
+      <span>${escapeHtml([source.agent_key ? `For ${source.agent_key}` : 'Scene', source.freshness].join(' - '))}</span>
       <strong>${escapeHtml(source.title)}</strong>
       <p>${escapeHtml(source.snippet)}</p>
     </a>
@@ -913,6 +912,7 @@ function bindWorldEvents() {
   $('#turnForm')?.addEventListener('submit', submitWorldTurn);
   $('#pauseScene')?.addEventListener('click', togglePauseScene);
   $('#completeScene')?.addEventListener('click', completeWorldScene);
+  $('#stopAudio')?.addEventListener('click', () => { stopWorldAudio(); toast('Voice stopped.'); });
   $('#recordTurn')?.addEventListener('click', () => toggleTurnRecording(false));
   $('#voiceModeToggle')?.addEventListener('click', toggleVoiceMode);
   $('#newScene')?.addEventListener('click', resetWorldComposer);

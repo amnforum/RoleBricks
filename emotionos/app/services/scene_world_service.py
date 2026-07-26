@@ -93,7 +93,7 @@ class SceneWorldService:
             manifest, usage = await self.compiler.compile(payload.prompt, locale=payload.locale)
             span.set_outputs({"cast_candidates": len(manifest.ai_characters), "usage": usage})
         if len(manifest.selected_characters) > self.settings.scene_max_agents:
-            raise ValidationError("The compiled scene selected more than three AI characters")
+            raise ValidationError(f"The compiled scene selected more than {self.settings.scene_max_agents} AI respondents")
 
         project = db.scalar(select(Project).where(Project.name == "EmotionOS Worlds").order_by(Project.created_at))
         if project is None:
@@ -316,7 +316,7 @@ class SceneWorldService:
         if not selected:
             raise ValidationError("Select at least one AI character")
         if len(selected) > self.settings.scene_max_agents:
-            raise ValidationError("Select no more than three AI characters")
+            raise ValidationError(f"Select no more than {self.settings.scene_max_agents} AI respondents")
         unauthorized = [
             character.name
             for character in selected
@@ -527,6 +527,67 @@ class SceneWorldService:
         db.commit()
         return self.read_scene(db, scene.id)
 
+    def delete_scene(self, db: Session, scene_id: uuid.UUID) -> None:
+        scene = db.scalar(self._scene_query().where(Scene.id == scene_id))
+        if scene is None or not scene.raw_prompt:
+            raise NotFoundError("Scene was not found")
+        for turn in scene.turns:
+            self._delete_stored_audio(turn.audio_path)
+        for agent in scene.agents:
+            self._delete_stored_audio((agent.voice_profile or {}).get("sample_audio_path"))
+        db.delete(scene)
+        db.commit()
+
+    def clear_history(self, db: Session, scene_id: uuid.UUID) -> WorldSceneRead:
+        scene = db.scalar(self._scene_query().where(Scene.id == scene_id))
+        if scene is None or not scene.raw_prompt:
+            raise NotFoundError("Scene was not found")
+        for turn in scene.turns:
+            self._delete_stored_audio(turn.audio_path)
+        db.execute(delete(SceneTurn).where(SceneTurn.scene_id == scene.id))
+        for agent in scene.agents:
+            state = dict(agent.runtime_state or {})
+            state["turn_count"] = 0
+            state.pop("relationship", None)
+            agent.runtime_state = state
+        scene.preparation = {
+            **dict(scene.preparation or {}),
+            "message": "Conversation history cleared. Respondent setup and evidence were kept.",
+        }
+        db.commit()
+        return self.read_scene(db, scene.id)
+
+    def clear_memories(self, db: Session, scene_id: uuid.UUID) -> WorldSceneRead:
+        scene = self._get_scene(db, scene_id)
+        db.execute(
+            delete(SceneMemoryRecord).where(
+                SceneMemoryRecord.scene_id == scene.id,
+                SceneMemoryRecord.layer.in_(["episode", "reflection"]),
+            )
+        )
+        for agent in scene.agents:
+            state = dict(agent.runtime_state or {})
+            state.pop("relationship", None)
+            state["turn_count"] = 0
+            agent.runtime_state = state
+        scene.preparation = {
+            **dict(scene.preparation or {}),
+            "message": "Respondent memories cleared. Personas and supplied evidence were kept.",
+        }
+        db.commit()
+        return self.read_scene(db, scene.id)
+
+    def delete_source(self, db: Session, scene_id: uuid.UUID, source_id: uuid.UUID) -> WorldSceneRead:
+        scene = self._get_scene(db, scene_id)
+        source = db.scalar(
+            select(SceneSource).where(SceneSource.scene_id == scene.id, SceneSource.id == source_id)
+        )
+        if source is None:
+            raise NotFoundError("Evidence source was not found")
+        db.delete(source)
+        db.commit()
+        return self.read_scene(db, scene.id)
+
     def pause(self, db: Session, scene_id: uuid.UUID) -> WorldSceneRead:
         scene = self._get_scene(db, scene_id)
         if scene.status != "live":
@@ -677,9 +738,11 @@ class SceneWorldService:
                 "url": source.url,
                 "snippet": source.snippet,
                 "freshness": source.freshness,
+                "agent_key": source.agent_key,
             }
-            for source in scene.sources[:10]
-        ]
+            for source in scene.sources
+            if source.agent_key == character.key
+        ][:8]
         live_research_usage: dict[str, int] = {}
         research_ms = 0
         retrieval_started = time.perf_counter()
@@ -805,6 +868,18 @@ class SceneWorldService:
                 "relationship_delta": action.relationship_delta,
                 "floor_score": floor.score,
                 "floor_reason": floor.reason,
+                "panel_plan": {
+                    "turns": [
+                        {
+                            "respondent_id": str(agent.id),
+                            "respondent_key": character.key,
+                            "purpose": "main_answer",
+                            "should_speak": True,
+                            "reason": floor.reason,
+                        }
+                    ],
+                    "max_default_respondents": 2,
+                },
                 "usage": usage,
                 "live_research_usage": live_research_usage,
                 "latency_ms": total_latency_ms,
@@ -946,20 +1021,7 @@ class SceneWorldService:
             target_manifest = SceneManifest.model_validate(target.manifest)
             selected_keys = {character.key for character in target_manifest.selected_characters}
             source_agents = [agent for agent in source.agents if agent.agent_key in selected_keys]
-            opening = next(
-                (
-                    turn
-                    for turn in source.turns
-                    if turn.speaker_type == "agent" and (turn.turn_data or {}).get("opening")
-                ),
-                None,
-            )
-            if (
-                len(source_agents) != len(selected_keys)
-                or opening is None
-                or not opening.audio_path
-                or opening.speaker_key not in selected_keys
-            ):
+            if len(source_agents) != len(selected_keys):
                 return None
             audio_paths = [
                 str((agent.voice_profile or {}).get("sample_audio_path") or "")
@@ -967,9 +1029,6 @@ class SceneWorldService:
             ]
             if any(not path or not self.storage.resolve(path).exists() for path in audio_paths):
                 return None
-            if not self.storage.resolve(opening.audio_path).exists():
-                return None
-
             db.execute(delete(SceneMemoryRecord).where(SceneMemoryRecord.scene_id == target.id))
             db.execute(delete(SceneTurn).where(SceneTurn.scene_id == target.id))
             db.execute(delete(SceneAgent).where(SceneAgent.scene_id == target.id))
@@ -1053,25 +1112,6 @@ class SceneWorldService:
                     )
                 )
 
-            opening_agent = created_agents[opening.speaker_key]
-            db.add(
-                SceneTurn(
-                    scene_id=target.id,
-                    speaker_type="agent",
-                    speaker_key=opening_agent.agent_key,
-                    speaker_name=opening_agent.name,
-                    action=opening.action,
-                    text=opening.text,
-                    audio_path=opening.audio_path,
-                    audio_data={
-                        **self._json_copy(opening.audio_data),
-                        "cache_hit": True,
-                        "cache_source_scene_id": str(source.id),
-                    },
-                    citations=[],
-                    turn_data={"opening": True, "cache_hit": True},
-                )
-            )
             job.status = "completed"
             job.stage = "ready"
             job.progress = 100
@@ -1093,7 +1133,7 @@ class SceneWorldService:
                 "source_count": len(source.sources),
                 "character_count": len(created_agents),
                 "evidence_summary": list((source.preparation or {}).get("evidence_summary") or []),
-                "message": "Scene ready from a verified prepared agent pack.",
+                "message": "Scene ready from a verified prepared agent pack. Enter and speak first.",
                 "error": None,
             }
             db.flush()
@@ -1163,6 +1203,23 @@ class SceneWorldService:
         }
         canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _assign_source_agent_key(source: dict[str, Any], agents: list[SceneAgent], index: int) -> str | None:
+        if not agents:
+            return None
+        explicit = str(source.get("agent_key") or source.get("character_key") or "").strip()
+        keys = {agent.agent_key for agent in agents}
+        if explicit in keys:
+            return explicit
+        haystack = " ".join(
+            str(source.get(key) or "")
+            for key in ("title", "snippet", "content", "supports")
+        ).casefold()
+        for agent in agents:
+            if agent.name.casefold() in haystack or agent.role.casefold() in haystack:
+                return agent.agent_key
+        return agents[index % len(agents)].agent_key
 
     @staticmethod
     def _json_copy(value: Any) -> Any:
@@ -1306,39 +1363,24 @@ class SceneWorldService:
                     )
 
             source_ids: dict[str, uuid.UUID] = {}
-            for source in research_packet.get("sources") or []:
+            selected_for_sources = list(created_agents.values())
+            for source_index, source in enumerate(research_packet.get("sources") or []):
                 if not isinstance(source, dict):
                     continue
+                agent_key = self._assign_source_agent_key(source, selected_for_sources, source_index)
                 row = SceneSource(
                     scene_id=scene.id,
-                    agent_key=None,
+                    agent_key=agent_key,
                     title=str(source.get("title") or "Research source")[:500],
                     url=str(source.get("url") or ""),
                     snippet=str(source.get("snippet") or ""),
                     freshness=str(source.get("freshness") or "stable")[:40],
-                    source_data=source,
+                    source_data={**source, "assigned_agent_key": agent_key},
                 )
                 db.add(row)
                 db.flush()
                 source_ids[str(source.get("id") or row.id)] = row.id
 
-            opening = prepared_by_key[prepared.opening_character_key]
-            opening_agent = created_agents[prepared.opening_character_key]
-            opening_sample_path = opening_agent.voice_profile["sample_audio_path"]
-            db.add(
-                SceneTurn(
-                    scene_id=scene.id,
-                    speaker_type="agent",
-                    speaker_key=opening_agent.agent_key,
-                    speaker_name=opening_agent.name,
-                    action=prepared.opening_action,
-                    text=opening.opening_line,
-                    audio_path=opening_sample_path,
-                    audio_data=opening_agent.voice_profile.get("sample_data") or {},
-                    citations=[],
-                    turn_data={"opening": True},
-                )
-            )
             job.status = "completed"
             job.stage = "ready"
             job.progress = 100
@@ -1356,7 +1398,7 @@ class SceneWorldService:
                 "source_count": len(source_ids),
                 "character_count": len(created_agents),
                 "evidence_summary": prepared.evidence_summary,
-                "message": "Scene ready. Enter when you are ready.",
+                "message": "Scene ready. Enter and speak first when you are ready.",
                 "error": None,
             }
             db.flush()
@@ -1503,6 +1545,14 @@ class SceneWorldService:
         if scene is None or not scene.raw_prompt:
             raise NotFoundError("Scene was not found")
         return scene
+
+    def _delete_stored_audio(self, stored_path: str | None) -> None:
+        if not stored_path:
+            return
+        try:
+            self.storage.resolve(stored_path).unlink(missing_ok=True)
+        except Exception:
+            return
 
     @staticmethod
     def _check_version(scene: Scene, expected_version: int) -> None:

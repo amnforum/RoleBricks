@@ -1475,3 +1475,36 @@ body[data-page="worlds"] label > select {
     padding: 0;
   }
 }
+
+
+.ready-character {
+  display: flex;
+  flex-direction: column;
+}
+
+.character-voice {
+  min-height: 48px;
+  margin-top: auto;
+  justify-content: center;
+  padding-top: 16px;
+}
+
+.character-voice button {
+  display: grid;
+  place-items: center;
+}
+
+.empty-transcript {
+  margin: auto;
+  max-width: 460px;
+  padding: 28px;
+  border: 1px solid #303846;
+  background: rgba(7, 11, 18, 0.72);
+  color: #9ea7b6;
+  text-align: center;
+  line-height: 1.55;
+}
+
+.live-actions #stopAudio {
+  color: #e8edf6;
+}

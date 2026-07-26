@@ -81,14 +81,15 @@ def test_confirm_prepares_cast_voice_memory_and_live_turn(client):
     ready = _wait_until_ready(client, scene_id)
 
     assert len(ready["agents"]) == 2
-    assert ready["turns"][0]["turn_data"]["opening"] is True
-    assert ready["turns"][0]["audio_url"]
+    assert ready["turns"] == []
     assert all(agent["voice_profile"]["sample_audio_url"] for agent in ready["agents"])
     assert ready["preparation"]["character_count"] == 2
 
     response = client.post(f"/api/worlds/{scene_id}/enter")
     assert response.status_code == 200, response.text
-    assert response.json()["status"] == "live"
+    entered = response.json()
+    assert entered["status"] == "live"
+    assert entered["turns"] == []
 
     response = client.post(
         f"/api/worlds/{scene_id}/turns",
@@ -98,6 +99,7 @@ def test_confirm_prepares_cast_voice_memory_and_live_turn(client):
     active = response.json()
     assert active["turns"][-1]["speaker_type"] == "agent"
     assert active["turns"][-1]["turn_data"]["latency_ms"] >= 0
+    assert active["turns"][-1]["turn_data"]["panel_plan"]["turns"][0]["should_speak"] is True
     assert set(active["turns"][-1]["turn_data"]["latency_breakdown_ms"]) == {
         "research",
         "retrieval",
@@ -123,15 +125,15 @@ def test_confirm_prepares_cast_voice_memory_and_live_turn(client):
     assert audio.headers["content-type"].startswith("audio/wav")
 
 
-def test_more_than_three_selected_characters_is_rejected(client):
+def test_more_than_five_selected_ai_respondents_is_rejected(client):
     scene = _create_scene(client)
     characters = scene["manifest"]["ai_characters"]
-    while len(characters) < 4:
+    while len(characters) < 6:
         duplicate = dict(characters[-1])
         duplicate["key"] = f"candidate-{len(characters) + 1}"
         duplicate["name"] = f"Candidate {len(characters) + 1}"
         characters.append(duplicate)
-    for character in characters[:4]:
+    for character in characters[:6]:
         character["selected"] = True
 
     response = client.patch(
@@ -139,7 +141,7 @@ def test_more_than_three_selected_characters_is_rejected(client):
         json={
             "expected_version": 1,
             "ai_characters": characters,
-            "change_reason": "Try four agents",
+            "change_reason": "Try six AI respondents",
         },
     )
     assert response.status_code == 422
@@ -205,5 +207,41 @@ def test_identical_scene_restores_prepared_pack_without_copying_conversation(cli
     restored = _wait_until_ready(client, second_id)
     assert restored["preparation"]["cache_hit"] is True
     assert restored["preparation_job"]["job_data"]["cache_hit"] is True
-    assert len(restored["turns"]) == 1
-    assert "private to the first scene" not in restored["turns"][0]["text"]
+    assert restored["turns"] == []
+
+
+def test_scene_management_actions_keep_or_remove_the_right_records(client):
+    scene = _create_scene(client)
+    scene_id = scene["id"]
+    confirmed = client.post(
+        f"/api/worlds/{scene_id}/confirm",
+        json={"expected_version": scene["active_manifest_version"]},
+    )
+    assert confirmed.status_code == 202, confirmed.text
+    ready = _wait_until_ready(client, scene_id)
+    assert ready["turns"] == []
+    assert client.post(f"/api/worlds/{scene_id}/enter").status_code == 200
+    turn = client.post(
+        f"/api/worlds/{scene_id}/turns",
+        json={"text": "Please challenge my answer with one practical objection."},
+    )
+    assert turn.status_code == 200, turn.text
+    active = turn.json()
+    assert len(active["turns"]) == 2
+    assert len(active["agents"]) == 2
+
+    cleared_memory = client.delete(f"/api/worlds/{scene_id}/memories")
+    assert cleared_memory.status_code == 200, cleared_memory.text
+    assert len(cleared_memory.json()["agents"]) == 2
+    assert len(cleared_memory.json()["turns"]) == 2
+
+    cleared_history = client.delete(f"/api/worlds/{scene_id}/history")
+    assert cleared_history.status_code == 200, cleared_history.text
+    history_payload = cleared_history.json()
+    assert history_payload["turns"] == []
+    assert len(history_payload["agents"]) == 2
+
+    deleted = client.delete(f"/api/worlds/{scene_id}")
+    assert deleted.status_code == 204, deleted.text
+    missing = client.get(f"/api/worlds/{scene_id}")
+    assert missing.status_code == 404
