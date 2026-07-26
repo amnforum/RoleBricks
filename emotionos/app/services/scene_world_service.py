@@ -528,7 +528,7 @@ class SceneWorldService:
         db.commit()
         return self.read_scene(db, scene.id)
 
-    async def delete_scene(self, db: Session, scene_id: uuid.UUID) -> None:
+    async def delete_scene(self, db: Session, scene_id: uuid.UUID, *, purge_external: bool = True) -> None:
         scene = db.scalar(self._scene_query().where(Scene.id == scene_id))
         if scene is None or not scene.raw_prompt:
             raise NotFoundError("Scene was not found")
@@ -538,6 +538,10 @@ class SceneWorldService:
             self._delete_stored_audio((agent.voice_profile or {}).get("sample_audio_path"))
         db.delete(scene)
         db.commit()
+        if purge_external:
+            await self.purge_scene_artifacts(scene_id)
+
+    async def purge_scene_artifacts(self, scene_id: uuid.UUID) -> None:
         try:
             await self.retriever.purge_scene(scene_id)
         except Exception as exc:
@@ -546,6 +550,7 @@ class SceneWorldService:
                 scene_id=str(scene_id),
                 error=str(exc),
             )
+
     def clear_history(self, db: Session, scene_id: uuid.UUID) -> WorldSceneRead:
         scene = db.scalar(self._scene_query().where(Scene.id == scene_id))
         if scene is None or not scene.raw_prompt:
@@ -1673,6 +1678,8 @@ class SceneWorldService:
             accent=accent,
             style="conversational",
         )
+
+
 
 
 

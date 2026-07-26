@@ -12,7 +12,8 @@ const worldState = {
   voiceMode: false,
   turnSubmitting: false,
   autoListenTimer: null,
-  recognition: null
+  recognition: null,
+  sceneRecognition: null
 };
 
 const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
@@ -833,6 +834,7 @@ function playWorldAudio(url, speakerKey = '') {
 
 function stopWorldAudio() {
   clearAutoListen();
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
   stopAutoVoiceTurn();
   if (worldState.audio) {
     worldState.audio.pause();
@@ -841,33 +843,51 @@ function stopWorldAudio() {
   }
 }
 
+function setSceneDictationUi(recording) {
+  const button = $('#dictateScene');
+  if (!button) return;
+  button.classList.toggle('is-recording', recording);
+  button.setAttribute('aria-label', recording ? 'Stop describing' : 'Describe by voice');
+  button.title = recording ? 'Stop describing' : 'Describe by voice';
+  button.innerHTML = `<i data-lucide="${recording ? 'square' : 'mic'}"></i>`;
+  refreshIcons();
+}
+
 function startSceneDictation() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
     toast('Voice dictation is not available in this browser.');
     return;
   }
+  if (worldState.sceneRecognition) {
+    const recognition = worldState.sceneRecognition;
+    worldState.sceneRecognition = null;
+    recognition.stop();
+    setSceneDictationUi(false);
+    return;
+  }
   const recognition = new Recognition();
+  worldState.sceneRecognition = recognition;
   recognition.lang = navigator.language || 'en-IN';
   recognition.interimResults = true;
-  recognition.continuous = false;
-  const button = $('#dictateScene');
+  recognition.continuous = true;
   const prompt = $('#scenePrompt');
   const baseText = prompt.value.trim();
   let finalText = '';
-  button.classList.add('is-recording');
+  setSceneDictationUi(true);
   recognition.onresult = (event) => {
     let interim = '';
     for (const result of event.results) {
       if (result.isFinal) finalText += result[0].transcript + ' ';
       else interim += result[0].transcript;
     }
-    prompt.value = [baseText, finalText || interim].filter(Boolean).join(' ').trim();
+    prompt.value = [baseText, finalText, interim].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
     updatePromptCount();
   };
   recognition.onerror = () => toast('I could not hear that clearly.');
   recognition.onend = () => {
-    button.classList.remove('is-recording');
+    worldState.sceneRecognition = null;
+    setSceneDictationUi(false);
     updatePromptCount();
     prompt.focus();
   };

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -55,10 +55,12 @@ def get_world(
 @router.delete("/worlds/{scene_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_world(
     scene_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     service: SceneWorldService = Depends(world_service),
 ):
-    await service.delete_scene(db, scene_id)
+    await service.delete_scene(db, scene_id, purge_external=False)
+    background_tasks.add_task(service.purge_scene_artifacts, scene_id)
     return None
 
 
@@ -198,6 +200,8 @@ def get_agent_sample(
         media_type="audio/wav",
         filename="emotionos-character-sample.wav",
     )
+
+
 
 
 

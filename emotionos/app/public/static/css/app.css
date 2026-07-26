@@ -33,72 +33,51 @@ body {
 }
 
 .ambient-audio-wave {
-  width: min(720px, 72vw);
-  height: 190px;
+  width: min(980px, 78vw);
+  height: 260px;
   position: fixed;
-  top: 104px;
-  right: -34px;
+  top: 86px;
+  right: -120px;
   z-index: 0;
-  display: grid;
-  grid-template-columns: repeat(25, minmax(2px, 1fr));
-  align-items: center;
-  gap: clamp(4px, 0.6vw, 9px);
-  opacity: 0.13;
+  opacity: 0.42;
   pointer-events: none;
-  animation: ambient-drift 10s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 18px rgba(255, 106, 0, 0.34)) drop-shadow(0 0 26px rgba(138, 79, 227, 0.22));
+  animation: ambient-drift 12s ease-in-out infinite alternate;
 }
 
-.ambient-audio-wave i {
-  height: 18px;
-  display: block;
-  background: currentColor;
-  transform-origin: center;
-  animation: ambient-level 5.2s ease-in-out infinite;
+.ambient-audio-wave::before,
+.ambient-audio-wave::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat-x;
+  background-size: 520px 180px;
+  background-position: 0 54%;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 78%, transparent);
 }
 
-.ambient-audio-wave i:nth-child(-n + 8) { color: var(--accent); }
-.ambient-audio-wave i:nth-child(n + 9):nth-child(-n + 17) { color: var(--purple); }
-.ambient-audio-wave i:nth-child(n + 18) { color: var(--blue); }
+.ambient-audio-wave::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 520 180'%3E%3Cpath d='M0 90 C32 18 64 18 96 90 S160 162 192 90 S256 18 288 90 S352 162 384 90 S448 18 520 90' fill='none' stroke='%23ff6a00' stroke-width='3.2' stroke-linecap='round'/%3E%3Cpath d='M0 90 C26 58 52 58 78 90 S130 122 156 90 S208 58 234 90 S286 122 312 90 S364 58 390 90 S468 122 520 90' fill='none' stroke='%238a4fe3' stroke-width='2' stroke-linecap='round' opacity='.82'/%3E%3C/svg%3E");
+  animation: wave-slide 9s linear infinite;
+}
 
-.ambient-audio-wave i:nth-child(1),
-.ambient-audio-wave i:nth-child(13),
-.ambient-audio-wave i:nth-child(25) { height: 14px; }
-.ambient-audio-wave i:nth-child(2),
-.ambient-audio-wave i:nth-child(12),
-.ambient-audio-wave i:nth-child(14),
-.ambient-audio-wave i:nth-child(24) { height: 32px; }
-.ambient-audio-wave i:nth-child(3),
-.ambient-audio-wave i:nth-child(11),
-.ambient-audio-wave i:nth-child(15),
-.ambient-audio-wave i:nth-child(23) { height: 58px; }
-.ambient-audio-wave i:nth-child(4),
-.ambient-audio-wave i:nth-child(10),
-.ambient-audio-wave i:nth-child(16),
-.ambient-audio-wave i:nth-child(22) { height: 90px; }
-.ambient-audio-wave i:nth-child(5),
-.ambient-audio-wave i:nth-child(9),
-.ambient-audio-wave i:nth-child(17),
-.ambient-audio-wave i:nth-child(21) { height: 122px; }
-.ambient-audio-wave i:nth-child(6),
-.ambient-audio-wave i:nth-child(8),
-.ambient-audio-wave i:nth-child(18),
-.ambient-audio-wave i:nth-child(20) { height: 150px; }
-.ambient-audio-wave i:nth-child(7),
-.ambient-audio-wave i:nth-child(19) { height: 174px; }
-.ambient-audio-wave i:nth-child(3n + 1) { animation-delay: -1.2s; }
-.ambient-audio-wave i:nth-child(3n + 2) { animation-delay: -2.7s; }
+.ambient-audio-wave::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 520 180'%3E%3Cpath d='M0 102 C44 44 66 44 110 102 S198 160 242 102 S330 44 374 102 S462 160 520 102' fill='none' stroke='%233478e5' stroke-width='2.4' stroke-linecap='round' opacity='.7'/%3E%3C/svg%3E");
+  transform: translateY(18px);
+  animation: wave-slide 13s linear infinite reverse;
+}
+
+.ambient-audio-wave i { display: none; }
 
 @keyframes ambient-drift {
-  from { transform: translate3d(0, -8px, 0); }
-  to { transform: translate3d(-42px, 12px, 0); }
+  from { transform: translate3d(0, -8px, 0) rotate(-1deg); }
+  to { transform: translate3d(-46px, 10px, 0) rotate(1deg); }
 }
 
-@keyframes ambient-level {
-  0%,
-  100% { transform: scaleY(0.72); }
-  50% { transform: scaleY(1.04); }
+@keyframes wave-slide {
+  from { background-position-x: 0; }
+  to { background-position-x: -520px; }
 }
-
 button,
 input,
 select,
@@ -332,3 +311,4 @@ h3 {
     animation: none;
   }
 }
+
