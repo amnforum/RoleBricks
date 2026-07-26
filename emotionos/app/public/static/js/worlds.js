@@ -24,8 +24,8 @@ const worldState = {
 
 const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
 const featuredSceneIds = ['a4d3a306-7624-458d-b8dd-4ec1ad70a281'];
-const voiceSilenceMs = 1300;
-const voiceFastSilenceMs = 760;
+const voiceSilenceMs = 1750;
+const voiceFastSilenceMs = 1050;
 const sceneDictationSilenceMs = 2200;
 const voiceNoiseTokens = new Set(['h', 'hi', 'hii', 'hiii', 'hello', 'uh', 'um', 'umm', 'mmm', 'a', 'aa', 'aaa']);
 
@@ -969,9 +969,10 @@ function startSceneDictation() {
   }
   const recognition = new Recognition();
   worldState.sceneRecognition = recognition;
-  recognition.lang = navigator.language || 'en-IN';
+  recognition.lang = preferredRecognitionLanguage();
   recognition.interimResults = true;
   recognition.continuous = true;
+  recognition.maxAlternatives = 3;
   const prompt = $('#scenePrompt');
   const baseText = prompt.value.trim();
   const finalSegments = [];
@@ -1069,6 +1070,24 @@ function clearVoiceInputTimer() {
   }
 }
 
+function preferredRecognitionLanguage() {
+  const language = String(navigator.language || '').trim();
+  if (/^(hi|en-IN)\b/i.test(language)) return language;
+  return 'en-IN';
+}
+
+function chooseSpeechTranscript(result) {
+  if (!result?.length) return '';
+  const alternatives = Array.from(result).slice(0, 3);
+  alternatives.sort((left, right) => {
+    const leftText = left?.transcript || '';
+    const rightText = right?.transcript || '';
+    const leftUseful = isMeaningfulVoiceText(leftText) ? 1 : 0;
+    const rightUseful = isMeaningfulVoiceText(rightText) ? 1 : 0;
+    return (rightUseful - leftUseful) || ((right.confidence || 0) - (left.confidence || 0));
+  });
+  return alternatives[0]?.transcript || '';
+}
 function submitVoiceTextNow(text) {
   const cleanText = String(text || '').replace(/\s+/g, ' ').trim();
   if (!worldState.voiceMode || worldState.turnSubmitting || !isMeaningfulVoiceText(cleanText)) return false;
@@ -1104,16 +1123,27 @@ function startAutoVoiceTurn() {
   if (worldState.recognition || worldState.turnSubmitting || worldState.audio) return;
   const recognition = new Recognition();
   worldState.recognition = recognition;
-  recognition.lang = navigator.language || 'en-IN';
+  recognition.lang = preferredRecognitionLanguage();
   recognition.interimResults = true;
   recognition.continuous = true;
-  let finalText = '';
+  recognition.maxAlternatives = 3;
+  const finalSegments = [];
   let interimText = '';
   let submitTimer = null;
+  const appendVoiceFinal = (transcript) => {
+    const segment = String(transcript || '').replace(/\s+/g, ' ').trim();
+    if (!isMeaningfulVoiceText(segment)) return;
+    const normalized = normalizeSceneTranscript(segment);
+    const repeated = finalSegments.slice(-4).some((existing) => {
+      const existingNormalized = normalizeSceneTranscript(existing);
+      return existingNormalized === normalized || transcriptSimilarity(existing, segment) >= 0.9;
+    });
+    if (!repeated) finalSegments.push(segment);
+  };
   let shouldSubmit = false;
   setTurnRecordingUi('recording');
   toast('Listening. Speak naturally; RoleBricks sends after a clear pause.');
-  const currentVoiceText = () => [finalText, interimText]
+  const currentVoiceText = () => [...finalSegments, interimText]
     .filter(Boolean)
     .join(' ')
     .replace(/\s+/g, ' ')
@@ -1124,7 +1154,7 @@ function startAutoVoiceTurn() {
     submitTimer = window.setTimeout(() => {
       const text = currentVoiceText() || $('#turnText').value.trim();
       if (!isMeaningfulVoiceText(text)) {
-        clearNoiseTurnText(finalText, interimText);
+        clearNoiseTurnText(finalSegments.join(' '), interimText);
         return;
       }
       shouldSubmit = true;
@@ -1136,16 +1166,15 @@ function startAutoVoiceTurn() {
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
       const result = event.results[index];
       const transcript = result[0].transcript || '';
-      if (result.isFinal) finalText += transcript + ' ';
-      else interimText += transcript;
+      if (result.isFinal) appendVoiceFinal(transcript);
+      else interimText += chooseSpeechTranscript(result);
     }
     const visibleText = currentVoiceText();
     $('#turnText').value = visibleText;
     if (isMeaningfulVoiceText(visibleText)) {
       queueSubmit();
-      queueVoiceTextSubmit(visibleText);
     }
-    else clearNoiseTurnText(finalText, interimText);
+    else clearNoiseTurnText(finalSegments.join(' '), interimText);
   };
   recognition.onerror = () => {
     window.clearTimeout(submitTimer);

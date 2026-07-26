@@ -39,6 +39,7 @@ class FloorManager:
                 reason="single_agent_lock",
             )
 
+        clean_text = user_text.casefold()
         words = {word.strip(".,!?;:").casefold() for word in user_text.split()}
         contradiction = len(words & self.contradiction_markers)
         urgency = len(words & self.urgency_markers)
@@ -47,16 +48,19 @@ class FloorManager:
             state = runtime_states.get(character.key) or {}
             patience = int(state.get("patience", character.patience))
             authority = int(state.get("authority", character.authority))
+            direct_address = character.name.casefold() in clean_text or character.role.casefold() in clean_text
             score = authority * 0.42
             score += character.interruption_tendency * min(2, contradiction) * 0.08
             score += min(2, urgency) * 6
             score += max(0, 50 - patience) * 0.12
-            score += 5 if index == turn_count % len(cast) else 0
+            score += 18 if index == turn_count % len(cast) else 0
+            if direct_address:
+                score += 45
             if len(cast) > 1 and character.key == last_character_key:
-                score -= 12
+                score -= 24
             reason = (
                 f"authority={authority}, patience={patience}, "
-                f"contradiction={contradiction}, urgency={urgency}"
+                f"contradiction={contradiction}, urgency={urgency}, direct_address={direct_address}"
             )
             scored.append((score, character, reason))
 
