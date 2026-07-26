@@ -4,6 +4,7 @@ import math
 import struct
 import uuid
 import wave
+from pathlib import Path
 
 import pytest
 
@@ -62,3 +63,44 @@ def test_storage_manager_uses_uuid_paths(tmp_path):
     )
     assert path.suffix == ".wav"
     assert tmp_path.resolve() in path.resolve().parents
+
+class _FakeFilesApi:
+    def __init__(self) -> None:
+        self.files: dict[str, bytes] = {}
+        self.directories: list[str] = []
+
+    def create_directory(self, directory_path: str) -> None:
+        self.directories.append(directory_path)
+
+    def upload(self, file_path: str, contents, **_kwargs) -> None:
+        self.files[file_path] = contents.read()
+
+    def download_to(self, file_path: str, destination: str, **_kwargs) -> None:
+        Path(destination).write_bytes(self.files[file_path])
+
+
+class _FakeWorkspaceClient:
+    def __init__(self) -> None:
+        self.files = _FakeFilesApi()
+
+
+def test_storage_manager_persists_and_restores_volume_audio(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"wave-bytes")
+    storage = StorageManager(
+        tmp_path / "cache",
+        volume_root="/Volumes/workspace/emotionos_worlds/scene_audio",
+    )
+    client = _FakeWorkspaceClient()
+    storage._workspace_client = client
+
+    stored = storage.store_audio(source, "worlds", str(uuid.uuid4()), "turns")
+    cached = storage.resolve(stored)
+    remote = f"/Volumes/workspace/emotionos_worlds/scene_audio/{stored}"
+
+    assert cached.read_bytes() == b"wave-bytes"
+    assert client.files.files[remote] == b"wave-bytes"
+
+    cached.unlink()
+    restored = storage.resolve(stored)
+    assert restored.read_bytes() == b"wave-bytes"

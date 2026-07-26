@@ -32,12 +32,13 @@ class Settings(BaseSettings):
     databricks_serving_endpoint: str = Field(default="", alias="DATABRICKS_SERVING_ENDPOINT")
     databricks_ai_search_index: str = Field(default="", alias="DATABRICKS_AI_SEARCH_INDEX")
     databricks_sql_warehouse_id: str = Field(default="", alias="DATABRICKS_SQL_WAREHOUSE_ID")
-    databricks_catalog: str = Field(default="main", alias="DATABRICKS_CATALOG")
+    databricks_catalog: str = Field(default="workspace", alias="DATABRICKS_CATALOG")
     databricks_schema: str = Field(default="emotionos_worlds", alias="DATABRICKS_SCHEMA")
     databricks_timeout_seconds: int = Field(default=90, alias="DATABRICKS_TIMEOUT_SECONDS")
     mlflow_experiment_id: str = Field(default="", alias="MLFLOW_EXPERIMENT_ID")
 
     audio_data_dir: str = Field(default="./data/emotionos_audio", alias="AUDIO_DATA_DIR")
+    audio_volume_path: str = Field(default="", alias="AUDIO_VOLUME_PATH")
     max_audio_size_mb: int = Field(default=25, alias="MAX_AUDIO_SIZE_MB")
 
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")

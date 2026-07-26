@@ -1,9 +1,9 @@
 -- Run once in the Databricks SQL editor before the first bundle deployment.
 -- Change the catalog or schema here only if you also change databricks.yml and app.yaml.
 
-CREATE SCHEMA IF NOT EXISTS main.emotionos_worlds;
+CREATE SCHEMA IF NOT EXISTS workspace.emotionos_worlds;
 
-CREATE TABLE IF NOT EXISTS main.emotionos_worlds.scene_memory_search (
+CREATE TABLE IF NOT EXISTS workspace.emotionos_worlds.scene_memory_search (
   record_id STRING NOT NULL,
   scene_id STRING NOT NULL,
   character_key STRING,
@@ -22,7 +22,7 @@ TBLPROPERTIES (
   delta.enableRowTracking = true
 );
 
-CREATE TABLE IF NOT EXISTS main.emotionos_worlds.scene_provider_usage (
+CREATE TABLE IF NOT EXISTS workspace.emotionos_worlds.scene_provider_usage (
   event_id STRING NOT NULL,
   scene_id STRING NOT NULL,
   operation STRING NOT NULL,

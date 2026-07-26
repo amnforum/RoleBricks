@@ -6,7 +6,7 @@ bundle:
 variables:
   catalog:
     description: Unity Catalog catalog used by EmotionOS
-    default: main
+    default: workspace
   schema:
     description: Unity Catalog schema used by EmotionOS
     default: emotionos_worlds
@@ -20,6 +20,21 @@ variables:
   secret_scope:
     description: Scope containing openai-api-key, sarvam-api-key, and hf-token
     default: emotionos-worlds
+
+sync:
+  exclude:
+    - .git/**
+    - .venv/**
+    - .env
+    - .databricks/**
+    - data/**
+    - tests/**
+    - hf_space/**
+    - scripts/**
+    - requirements-dev.txt
+    - README.md
+    - "*.db"
+    - "*.log"
 
 resources:
   volumes:
@@ -52,20 +67,6 @@ resources:
       no_expiry: true
       replace_existing: true
 
-  postgres_roles:
-    scene_owner_role:
-      parent: ${resources.postgres_branches.scene_state_branch.name}
-      role_id: scene-owner
-      postgres_role: scene_owner
-      auth_method: NO_LOGIN
-
-  postgres_databases:
-    scene_state_database:
-      parent: ${resources.postgres_branches.scene_state_branch.name}
-      database_id: emotionos
-      postgres_database: emotionos
-      role: ${resources.postgres_roles.scene_owner_role.id}
-
   postgres_endpoints:
     scene_state_endpoint:
       parent: ${resources.postgres_branches.scene_state_branch.name}
@@ -73,10 +74,6 @@ resources:
       endpoint_type: ENDPOINT_TYPE_READ_WRITE
       autoscaling_limit_min_cu: 0.5
       autoscaling_limit_max_cu: 0.5
-      suspend_timeout_duration: 300s
-      group:
-        min: 1
-        max: 1
       replace_existing: true
 
   pipelines:
@@ -88,7 +85,7 @@ resources:
       continuous: false
       development: false
       channel: CURRENT
-      edition: CORE
+      edition: ADVANCED
       libraries:
         - file:
             path: ./databricks/pipelines/scene_memory_pipeline.py
@@ -135,7 +132,7 @@ resources:
         - name: lakebase-db
           postgres:
             branch: ${resources.postgres_branches.scene_state_branch.name}
-            database: ${resources.postgres_databases.scene_state_database.name}
+            database: ${resources.postgres_branches.scene_state_branch.name}/databases/databricks-postgres
             permission: CAN_CONNECT_AND_CREATE
         - name: foundation-model
           serving_endpoint:

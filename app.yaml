@@ -17,6 +17,8 @@ env:
   - name: LAKEBASE_ENDPOINT_NAME
     valueFrom: lakebase-db
   - name: AUDIO_DATA_DIR
+    value: /tmp/emotionos_audio
+  - name: AUDIO_VOLUME_PATH
     valueFrom: scene-audio
 
   - name: SCENE_COMPILER_PROVIDER
@@ -36,7 +38,7 @@ env:
   - name: DATABRICKS_SQL_WAREHOUSE_ID
     valueFrom: sql-warehouse
   - name: DATABRICKS_CATALOG
-    value: main
+    value: workspace
   - name: DATABRICKS_SCHEMA
     value: emotionos_worlds
   - name: MLFLOW_EXPERIMENT_ID

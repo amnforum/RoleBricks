@@ -10,3 +10,4 @@ data/
 *.pyo
 *.sqlite
 *.db
+.databricks/

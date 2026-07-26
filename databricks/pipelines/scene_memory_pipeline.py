@@ -4,7 +4,7 @@ from pyspark.sql import functions as F
 
 SOURCE_TABLE = spark.conf.get(
     "emotionos.source_table",
-    "main.emotionos_worlds.scene_memory_search",
+    "workspace.emotionos_worlds.scene_memory_search",
 )
 
 

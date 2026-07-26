@@ -9,6 +9,18 @@ from sqlalchemy.orm import Session, sessionmaker
 from emotionos.app.core.config import get_settings
 
 
+def _lakebase_schema_name() -> str:
+    configured = os.getenv("LAKEBASE_SCHEMA", "").strip()
+    if configured:
+        return configured
+
+    app_name = os.getenv("PGAPPNAME", "emotionos").strip()
+    client_id = os.getenv("DATABRICKS_CLIENT_ID", os.getenv("PGUSER", "")).strip()
+    if not client_id:
+        raise RuntimeError("Lakebase schema identity is missing")
+    return f"{app_name}_schema_{client_id.replace('-', '')}"
+
+
 def _lakebase_connection_creator() -> Callable[[], object]:
     required = ["PGHOST", "PGDATABASE", "PGUSER", "LAKEBASE_ENDPOINT_NAME"]
     missing = [name for name in required if not os.getenv(name, "").strip()]
@@ -17,12 +29,13 @@ def _lakebase_connection_creator() -> Callable[[], object]:
 
     def connect():
         import psycopg
+        from psycopg import sql
         from databricks.sdk import WorkspaceClient
 
         credential = WorkspaceClient().postgres.generate_database_credential(
             endpoint=os.environ["LAKEBASE_ENDPOINT_NAME"]
         )
-        return psycopg.connect(
+        connection = psycopg.connect(
             host=os.environ["PGHOST"],
             port=os.getenv("PGPORT", "5432"),
             dbname=os.environ["PGDATABASE"],
@@ -31,6 +44,14 @@ def _lakebase_connection_creator() -> Callable[[], object]:
             sslmode=os.getenv("PGSSLMODE", "require"),
             application_name=os.getenv("PGAPPNAME", "emotionos"),
         )
+        schema_name = _lakebase_schema_name()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name))
+            )
+            cursor.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema_name)))
+        connection.commit()
+        return connection
 
     return connect
 

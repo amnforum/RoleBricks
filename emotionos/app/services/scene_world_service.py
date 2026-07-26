@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import shutil
 import uuid
 from pathlib import Path
 from typing import Any
@@ -11,7 +10,7 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
-from emotionos.app.audio.storage import StorageManager, safe_join
+from emotionos.app.audio.storage import StorageManager
 from emotionos.app.core.config import Settings
 from emotionos.app.core.exceptions import NotFoundError, ValidationError
 from emotionos.app.db.base import utc_now
@@ -1090,19 +1089,16 @@ class SceneWorldService:
             instructions=instructions,
             context=context,
         )
-        target_dir = safe_join(
-            self.storage.root,
+        stored = await asyncio.to_thread(
+            self.storage.store_audio,
+            generated.path,
             "worlds",
             str(scene_id),
             "agents",
             character.key,
             category,
         )
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / f"{uuid.uuid4()}.wav"
-        shutil.copyfile(generated.path, target)
         generated.path.unlink(missing_ok=True)
-        stored = str(target.relative_to(self.storage.root))
         return stored, {
             "status": "ready",
             "engine_name": generated.engine_name,

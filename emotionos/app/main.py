@@ -35,7 +35,7 @@ templates = Jinja2Templates(directory="emotionos/app/templates")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    storage = StorageManager(settings.audio_root)
+    storage = StorageManager(settings.audio_root, volume_root=settings.audio_volume_path)
     if settings.test_mode and settings.use_mock_tts:
         provider = MockProvider()
     else:
