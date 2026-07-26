@@ -224,6 +224,12 @@
         <button class="icon-control" type="button" data-open-evidence aria-label="Open evidence" title="Open evidence">
           <i data-lucide="library"></i>
         </button>
+        <button class="icon-control" type="button" id="manageScene" aria-label="Manage scene" title="Manage scene">
+          <i data-lucide="settings"></i>
+        </button>
+        <button class="icon-control" type="button" id="stopAudio" aria-label="Stop current voice" title="Stop current voice">
+          <i data-lucide="square"></i>
+        </button>
         <button class="icon-control" type="button" id="pauseScene" aria-label="Pause scene" title="Pause scene">
           <i data-lucide="pause"></i>
         </button>
@@ -284,12 +290,29 @@
   <div id="evidenceList"></div>
 </dialog>
 
+<dialog class="scene-manage-drawer" id="sceneManageDrawer">
+  <div class="drawer-heading">
+    <div>
+      <p class="world-eyebrow">Manage</p>
+      <h2>Scene storage</h2>
+    </div>
+    <button class="icon-control" type="button" id="closeSceneManage" aria-label="Close scene manager" title="Close">
+      <i data-lucide="x"></i>
+    </button>
+  </div>
+  <div class="scene-manage-body">
+    <button type="button" id="clearSceneHistory">Clear conversation history</button>
+    <button type="button" id="clearSceneMemories">Clear respondent memories</button>
+    <button class="danger-action" type="button" id="deleteScene">Delete scene</button>
+  </div>
+</dialog>
+
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/static/js/app.js?v=rolebricks-1"></script>
   
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script src="/static/js/worlds.js?v=living-scenes-4"></script>
+  <script src="/static/js/worlds.js?v=living-scenes-5"></script>
 
 </body>
 </html>

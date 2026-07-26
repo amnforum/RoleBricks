@@ -1508,3 +1508,111 @@ body[data-page="worlds"] label > select {
 .live-actions #stopAudio {
   color: #e8edf6;
 }
+
+
+/* Final MVP call-mode layout polish */
+body[data-page="worlds"] .page-shell {
+  width: min(1888px, calc(100% - 28px));
+  min-height: calc(100vh - 76px);
+}
+
+.live-view {
+  height: calc(100vh - 124px);
+  min-height: 640px;
+}
+
+.live-heading {
+  height: 76px;
+}
+
+.live-heading h1 {
+  max-width: min(980px, 62vw);
+  font-size: clamp(1.15rem, 2.2vw, 2.4rem);
+}
+
+.live-stage {
+  height: calc(100% - 76px);
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.conversation {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.transcript {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: clamp(20px, 3vw, 42px) clamp(24px, 7vw, 150px) 28px;
+  overflow-y: auto;
+  scrollbar-color: #1f3768 #05070d;
+}
+
+.turn {
+  width: min(920px, 100%);
+  max-width: min(920px, 100%);
+}
+
+.turn p {
+  font-size: clamp(1rem, 1.25vw, 1.35rem);
+  line-height: 1.55;
+}
+
+.turn.is-user {
+  width: min(760px, 72%);
+}
+
+.turn.is-user p {
+  background: #121212;
+  font-size: clamp(1rem, 1.18vw, 1.22rem);
+}
+
+.turn-composer {
+  position: sticky;
+  bottom: 0;
+  max-width: none;
+  margin: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: rgba(5, 7, 12, 0.98);
+}
+
+.turn-composer textarea {
+  min-height: 54px;
+  max-height: 90px;
+}
+
+.scene-manage-drawer {
+  width: min(420px, calc(100% - 28px));
+  margin: 14px 14px 14px auto;
+  padding: 0;
+  border: 1px solid #4a4a4a;
+  border-radius: 2px;
+  background: #090909;
+  color: #f4f4f4;
+}
+
+.scene-manage-drawer::backdrop { background: rgba(0,0,0,.74); }
+
+.scene-manage-body {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.scene-manage-body button {
+  justify-content: flex-start;
+}
+
+.danger-action {
+  border-color: #7f1d1d;
+  color: #fecaca;
+}
+
+@media (max-width: 760px) {
+  .live-stage { grid-template-columns: 1fr; }
+  .transcript { padding: 16px 14px 18px; }
+  .turn.is-user { width: 100%; }
+}

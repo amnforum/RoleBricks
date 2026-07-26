@@ -11,7 +11,8 @@ const worldState = {
   currentView: null,
   voiceMode: false,
   turnSubmitting: false,
-  autoListenTimer: null
+  autoListenTimer: null,
+  recognition: null
 };
 
 const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
@@ -61,10 +62,10 @@ function clearAutoListen() {
 function scheduleAutoListen() {
   clearAutoListen();
   if (!worldState.voiceMode || worldState.scene?.status !== 'live') return;
-  if (worldState.recorder?.state === 'recording' || worldState.turnSubmitting || worldState.audio) return;
+  if (worldState.recognition || worldState.recorder?.state === 'recording' || worldState.turnSubmitting || worldState.audio) return;
   worldState.autoListenTimer = window.setTimeout(() => {
     if (worldState.voiceMode && worldState.scene?.status === 'live' && !worldState.audio) {
-      toggleTurnRecording(true);
+      startAutoVoiceTurn();
     }
   }, 650);
 }
@@ -391,7 +392,7 @@ function updateCastCount() {
 }
 
 function toggleCastSelection(input) {
-  if (input.checked && $('[data-cast-selected]:checked').length > 5) {
+  if (input.checked && $$('[data-cast-selected]:checked').length > 5) {
     input.checked = false;
     toast('This MVP supports up to five AI respondents plus the human user.');
   }
@@ -775,6 +776,7 @@ function playWorldAudio(url, speakerKey = '') {
 
 function stopWorldAudio() {
   clearAutoListen();
+  stopAutoVoiceTurn();
   if (worldState.audio) {
     worldState.audio.pause();
     worldState.audio.currentTime = 0;
@@ -803,6 +805,52 @@ function startSceneDictation() {
   recognition.start();
 }
 
+function startAutoVoiceTurn() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    toggleTurnRecording(true);
+    return;
+  }
+  if (worldState.recognition || worldState.turnSubmitting || worldState.audio) return;
+  const recognition = new Recognition();
+  worldState.recognition = recognition;
+  recognition.lang = navigator.language || 'en-IN';
+  recognition.interimResults = true;
+  recognition.continuous = false;
+  let finalText = '';
+  setTurnRecordingUi('recording');
+  toast('Listening. Speak naturally; RoleBricks will send when you pause.');
+  recognition.onresult = (event) => {
+    let interim = '';
+    for (const result of event.results) {
+      if (result.isFinal) finalText += result[0].transcript + ' ';
+      else interim += result[0].transcript;
+    }
+    $('#turnText').value = (finalText || interim).trim();
+  };
+  recognition.onerror = () => {
+    worldState.recognition = null;
+    setTurnRecordingUi('idle');
+    scheduleAutoListen();
+  };
+  recognition.onend = () => {
+    worldState.recognition = null;
+    const text = $('#turnText').value.trim();
+    setTurnRecordingUi('idle');
+    if (worldState.voiceMode && text) $('#turnForm').requestSubmit();
+    else if (worldState.voiceMode) scheduleAutoListen();
+  };
+  recognition.start();
+}
+
+function stopAutoVoiceTurn() {
+  if (worldState.recognition) {
+    const recognition = worldState.recognition;
+    worldState.recognition = null;
+    recognition.stop();
+  }
+}
+
 function setTurnRecordingUi(state) {
   const button = $('#recordTurn');
   const recording = state === 'recording';
@@ -817,6 +865,10 @@ function setTurnRecordingUi(state) {
 }
 
 async function toggleTurnRecording(autoStarted = false) {
+  if (worldState.recognition) {
+    stopAutoVoiceTurn();
+    return;
+  }
   if (worldState.recorder?.state === 'recording') {
     worldState.recorder.stop();
     return;
@@ -891,12 +943,47 @@ function toggleVoiceMode() {
   worldState.voiceMode = !worldState.voiceMode;
   updateVoiceModeUi();
   if (worldState.voiceMode) {
-    toast('Voice mode is on. Speak, stop, then the agent will answer.');
+    toast('Voice mode is on. Speak naturally; it sends when you pause.');
     if (!worldState.audio) scheduleAutoListen();
   } else {
     clearAutoListen();
+    stopAutoVoiceTurn();
     toast('Voice mode is off.');
   }
+}
+
+async function clearSceneHistory() {
+  if (!worldState.scene || !confirm('Clear conversation history for this scene? Respondents and evidence stay.')) return;
+  try {
+    const scene = await api(`/api/worlds/${worldState.scene.id}/history`, { method: 'DELETE' });
+    worldState.scene = scene;
+    renderWorldScene(scene);
+    $('#sceneManageDrawer')?.close();
+    toast('Conversation history cleared.');
+  } catch (error) { toast(error.message); }
+}
+
+async function clearSceneMemories() {
+  if (!worldState.scene || !confirm('Clear learned respondent memories? Persona and evidence stay.')) return;
+  try {
+    const scene = await api(`/api/worlds/${worldState.scene.id}/memories`, { method: 'DELETE' });
+    worldState.scene = scene;
+    renderWorldScene(scene);
+    $('#sceneManageDrawer')?.close();
+    toast('Respondent memories cleared.');
+  } catch (error) { toast(error.message); }
+}
+
+async function deleteCurrentScene() {
+  if (!worldState.scene || !confirm('Delete this scene and its generated audio? This cannot be undone.')) return;
+  const sceneId = worldState.scene.id;
+  try {
+    await api(`/api/worlds/${sceneId}`, { method: 'DELETE' });
+    forgetScene(sceneId);
+    $('#sceneManageDrawer')?.close();
+    resetWorldComposer();
+    toast('Scene deleted.');
+  } catch (error) { toast(error.message); }
 }
 
 function bindWorldEvents() {
@@ -918,6 +1005,11 @@ function bindWorldEvents() {
   $('#newScene')?.addEventListener('click', resetWorldComposer);
   $('#resumeScene')?.addEventListener('click', resumeCompletedScene);
   $('#closeEvidence')?.addEventListener('click', () => $('#evidenceDrawer').close());
+  $('#manageScene')?.addEventListener('click', () => $('#sceneManageDrawer')?.showModal());
+  $('#closeSceneManage')?.addEventListener('click', () => $('#sceneManageDrawer')?.close());
+  $('#clearSceneHistory')?.addEventListener('click', clearSceneHistory);
+  $('#clearSceneMemories')?.addEventListener('click', clearSceneMemories);
+  $('#deleteScene')?.addEventListener('click', deleteCurrentScene);
 
   document.addEventListener('click', (event) => {
     const loadButton = event.target.closest('[data-load-scene]');

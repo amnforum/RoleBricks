@@ -745,16 +745,7 @@ class SceneWorldService:
         ][:8]
         live_research_usage: dict[str, int] = {}
         research_ms = 0
-        retrieval_started = time.perf_counter()
-        retrieval_task = asyncio.create_task(
-            self.retriever.retrieve(
-                scene_id=scene.id,
-                character_key=character.key,
-                query=payload.text,
-                current_memories=memory_payload,
-                current_sources=source_payload,
-            )
-        )
+        retrieval_ms = 0
         live_packet: dict[str, Any] = {"sources": []}
         if self._needs_fresh_research(payload.text):
             query = (
@@ -775,8 +766,6 @@ class SceneWorldService:
                 })
             research_ms = round((time.perf_counter() - research_started) * 1000)
 
-        memory_payload, source_payload = await retrieval_task
-        retrieval_ms = round((time.perf_counter() - retrieval_started) * 1000)
         existing_urls = {item["url"] for item in source_payload if item.get("url")}
         for source_data in live_packet.get("sources") or []:
             url = str(source_data.get("url") or "").strip()
