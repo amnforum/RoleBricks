@@ -35,6 +35,11 @@ sync:
     - README.md
     - "*.db"
     - "*.log"
+    - .codex-ppt/**
+    - .demo-*.json
+    - RoleBricks_Hackathon_Pitch.pptx*
+    - "*.pptx"
+    - "~*"
 
 resources:
   volumes:

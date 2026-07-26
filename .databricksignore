@@ -18,3 +18,9 @@ README.md
 *.sqlite
 *.log
 mvp-*.png
+.codex-ppt/
+.demo-*.json
+RoleBricks_Hackathon_Pitch.pptx*
+~$RoleBricks_Hackathon_Pitch.pptx
+*.pptx
+~*
