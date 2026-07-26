@@ -1339,3 +1339,139 @@ body[data-page="worlds"] label > select {
   margin: 10px auto 14px;
   text-align: left;
 }
+
+/* Live scene hardening: keep the voice-agent surface contained and readable. */
+.live-view,
+.live-stage,
+.conversation,
+.transcript,
+.turn-composer,
+.turn,
+.turn p,
+.live-cast-person {
+  min-width: 0;
+}
+
+.live-view {
+  width: 100%;
+  max-width: 100%;
+}
+
+.live-stage,
+.conversation {
+  overflow: hidden;
+}
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-x: hidden;
+}
+
+.turn {
+  width: fit-content;
+  max-width: min(720px, 100%);
+  margin-bottom: 0;
+}
+
+.turn.is-user {
+  width: min(720px, 100%);
+  padding-left: 0;
+}
+
+.turn-meta,
+.turn p,
+.live-cast-person strong,
+.live-cast-person span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.turn p {
+  max-width: 100%;
+}
+
+.turn-composer {
+  flex: 0 0 auto;
+  max-width: calc(100% - 40px);
+}
+
+.turn-composer textarea {
+  display: block;
+  width: 100%;
+}
+
+.composer-actions {
+  flex-wrap: wrap;
+}
+
+.voice-mode-toggle {
+  min-width: 128px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-color: #3a4658;
+  background: #0b111c;
+  color: #d7dee9;
+  white-space: nowrap;
+}
+
+.voice-mode-toggle svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.voice-mode-toggle.is-active {
+  border-color: var(--accent);
+  background: #1a1008;
+  color: #ffffff;
+}
+
+.voice-mode-toggle.is-active + .send-turn,
+.mic-button.is-recording + .voice-mode-toggle {
+  border-color: var(--accent);
+}
+
+@media (max-width: 760px) {
+  .live-view {
+    height: auto;
+    min-height: calc(100vh - 92px);
+  }
+
+  .live-stage {
+    min-height: calc(100vh - 216px);
+  }
+
+  .transcript {
+    padding: 16px 12px 18px;
+  }
+
+  .turn-composer {
+    max-width: calc(100% - 16px);
+  }
+
+  .voice-mode-toggle {
+    width: auto;
+    min-width: 112px;
+    flex: 1 1 112px;
+  }
+
+  .send-turn,
+  .mic-button {
+    flex: 0 0 40px;
+  }
+}
+
+@media (max-width: 430px) {
+  .voice-mode-toggle span {
+    display: none;
+  }
+
+  .voice-mode-toggle {
+    min-width: 40px;
+    flex: 0 0 40px;
+    padding: 0;
+  }
+}

@@ -45,10 +45,9 @@ class SceneTelemetry:
 
         try:
             import mlflow
-        except ImportError as exc:
-            raise RuntimeError(
-                "MLflow tracing is configured but mlflow is not installed."
-            ) from exc
+        except (ImportError, AttributeError):
+            yield _NoopSpan()
+            return
 
         if not self._configured:
             mlflow.set_tracking_uri("databricks")

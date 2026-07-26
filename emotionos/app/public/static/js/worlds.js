@@ -8,7 +8,10 @@ const worldState = {
   recordingChunks: [],
   recordingTimer: null,
   lastRenderedTurnId: null,
-  currentView: null
+  currentView: null,
+  voiceMode: false,
+  turnSubmitting: false,
+  autoListenTimer: null
 };
 
 const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
@@ -34,6 +37,38 @@ function refreshIcons() {
   window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
 }
 
+function updateVoiceModeUi() {
+  const button = $('#voiceModeToggle');
+  if (!button) return;
+  button.classList.toggle('is-active', worldState.voiceMode);
+  button.setAttribute('aria-pressed', worldState.voiceMode ? 'true' : 'false');
+  button.setAttribute('aria-label', worldState.voiceMode ? 'Turn off voice mode' : 'Turn on voice mode');
+  button.title = worldState.voiceMode ? 'Voice mode on' : 'Voice mode';
+  const icon = button.querySelector('i');
+  if (icon) icon.dataset.lucide = worldState.voiceMode ? 'radio-tower' : 'radio';
+  const label = button.querySelector('span');
+  if (label) label.textContent = worldState.voiceMode ? 'Voice on' : 'Voice mode';
+  refreshIcons();
+}
+
+function clearAutoListen() {
+  if (worldState.autoListenTimer) {
+    window.clearTimeout(worldState.autoListenTimer);
+    worldState.autoListenTimer = null;
+  }
+}
+
+function scheduleAutoListen() {
+  clearAutoListen();
+  if (!worldState.voiceMode || worldState.scene?.status !== 'live') return;
+  if (worldState.recorder?.state === 'recording' || worldState.turnSubmitting || worldState.audio) return;
+  worldState.autoListenTimer = window.setTimeout(() => {
+    if (worldState.voiceMode && worldState.scene?.status === 'live' && !worldState.audio) {
+      toggleTurnRecording(true);
+    }
+  }, 650);
+}
+
 function setWorldView(view) {
   const changed = worldState.currentView !== view;
   worldState.currentView = view;
@@ -56,6 +91,7 @@ function setWorldView(view) {
   });
   if (changed) window.scrollTo({ top: 0, behavior: 'smooth' });
   refreshIcons();
+  updateVoiceModeUi();
 }
 
 function setWorldBusy(button, busy, label = 'Working...') {
@@ -564,6 +600,7 @@ async function enterWorldScene() {
 }
 
 function renderLive(scene) {
+  updateVoiceModeUi();
   const paused = scene.status === 'paused';
   $('#liveStatus').textContent = paused ? 'Scene paused' : 'Live scene';
   $('#liveTitle').textContent = scene.manifest.title;
@@ -611,6 +648,8 @@ async function submitWorldTurn(event) {
   const button = event.currentTarget.querySelector('button[type="submit"]');
   setWorldBusy(button, true, '');
   textInput.disabled = true;
+  worldState.turnSubmitting = true;
+  clearAutoListen();
   try {
     const previousLastId = worldState.scene.turns.at(-1)?.id;
     const scene = await api(`/api/worlds/${worldState.scene.id}/turns`, {
@@ -630,12 +669,15 @@ async function submitWorldTurn(event) {
     toast(error.message);
   } finally {
     textInput.disabled = worldState.scene?.status === 'paused';
+    worldState.turnSubmitting = false;
     setWorldBusy(button, false);
+    if (worldState.recorder?.state !== 'recording') setTurnRecordingUi('idle');
     refreshIcons();
   }
 }
 
 async function togglePauseScene() {
+  clearAutoListen();
   const scene = worldState.scene;
   try {
     if (scene.status === 'paused') {
@@ -655,6 +697,9 @@ async function togglePauseScene() {
 }
 
 async function completeWorldScene() {
+  worldState.voiceMode = false;
+  updateVoiceModeUi();
+  clearAutoListen();
   try {
     const scene = await api(`/api/worlds/${worldState.scene.id}/complete`, { method: 'POST' });
     worldState.scene = scene;
@@ -719,11 +764,18 @@ function playWorldAudio(url, speakerKey = '') {
   audio.addEventListener('ended', () => {
     worldState.audio = null;
     $$('[data-live-agent]').forEach((element) => element.classList.remove('is-speaking'));
+    scheduleAutoListen();
   }, { once: true });
-  audio.play().catch(() => toast('Press play again to hear the voice.'));
+  audio.play().catch(() => {
+    worldState.audio = null;
+    $$('[data-live-agent]').forEach((element) => element.classList.remove('is-speaking'));
+    toast('Press play again to hear the voice.');
+    scheduleAutoListen();
+  });
 }
 
 function stopWorldAudio() {
+  clearAutoListen();
   if (worldState.audio) {
     worldState.audio.pause();
     worldState.audio.currentTime = 0;
@@ -752,7 +804,20 @@ function startSceneDictation() {
   recognition.start();
 }
 
-async function toggleTurnRecording() {
+function setTurnRecordingUi(state) {
+  const button = $('#recordTurn');
+  const recording = state === 'recording';
+  const processing = state === 'processing';
+  button.classList.toggle('is-recording', recording);
+  button.disabled = processing || worldState.turnSubmitting;
+  button.setAttribute('aria-label', recording ? 'Stop recording' : processing ? 'Processing recording' : 'Speak');
+  button.setAttribute('title', recording ? 'Stop recording' : processing ? 'Processing recording' : 'Speak');
+  button.innerHTML = `<i data-lucide="${recording ? 'square' : processing ? 'loader-circle' : 'mic'}"></i>`;
+  $('#voiceWave').classList.toggle('is-recording', recording);
+  refreshIcons();
+}
+
+async function toggleTurnRecording(autoStarted = false) {
   if (worldState.recorder?.state === 'recording') {
     worldState.recorder.stop();
     return;
@@ -771,8 +836,8 @@ async function toggleTurnRecording() {
     });
     recorder.addEventListener('stop', transcribeTurnRecording, { once: true });
     recorder.start();
-    $('#recordTurn').classList.add('is-recording');
-    $('#voiceWave').classList.add('is-recording');
+    setTurnRecordingUi('recording');
+    toast(autoStarted ? 'Listening. Tap the square when you are done.' : 'Recording. Tap the square when you are done.');
     worldState.recordingTimer = window.setTimeout(() => {
       if (recorder.state === 'recording') recorder.stop();
     }, 60000);
@@ -783,29 +848,32 @@ async function toggleTurnRecording() {
 
 async function transcribeTurnRecording() {
   window.clearTimeout(worldState.recordingTimer);
-  $('#recordTurn').classList.remove('is-recording');
-  $('#voiceWave').classList.remove('is-recording');
+  setTurnRecordingUi('processing');
   worldState.mediaStream?.getTracks().forEach((track) => track.stop());
   const type = worldState.recorder?.mimeType || 'audio/webm';
   const blob = new Blob(worldState.recordingChunks, { type });
   const form = new FormData();
   form.append('source_audio', blob, type.includes('ogg') ? 'turn.ogg' : 'turn.webm');
-  const button = $('#recordTurn');
-  button.disabled = true;
   try {
     const result = await api('/api/transcribe', { method: 'POST', body: form });
     $('#turnText').value = result.text;
-    $('#turnText').focus();
+    if (worldState.voiceMode && result.text.trim()) {
+      $('#turnForm').requestSubmit();
+    } else {
+      $('#turnText').focus();
+    }
   } catch (error) {
     toast(error.message);
   } finally {
-    button.disabled = false;
+    setTurnRecordingUi('idle');
     worldState.recorder = null;
     worldState.recordingChunks = [];
   }
 }
 
 function resetWorldComposer() {
+  worldState.voiceMode = false;
+  clearAutoListen();
   clearWorldPoll();
   stopWorldAudio();
   worldState.scene = null;
@@ -814,6 +882,22 @@ function resetWorldComposer() {
   updatePromptCount();
   setWorldView('describe');
   loadRecentScenes();
+}
+
+function toggleVoiceMode() {
+  if (worldState.scene?.status !== 'live') {
+    toast('Enter a live scene before turning on voice mode.');
+    return;
+  }
+  worldState.voiceMode = !worldState.voiceMode;
+  updateVoiceModeUi();
+  if (worldState.voiceMode) {
+    toast('Voice mode is on. Speak, stop, then the agent will answer.');
+    if (!worldState.audio) scheduleAutoListen();
+  } else {
+    clearAutoListen();
+    toast('Voice mode is off.');
+  }
 }
 
 function bindWorldEvents() {
@@ -829,7 +913,8 @@ function bindWorldEvents() {
   $('#turnForm')?.addEventListener('submit', submitWorldTurn);
   $('#pauseScene')?.addEventListener('click', togglePauseScene);
   $('#completeScene')?.addEventListener('click', completeWorldScene);
-  $('#recordTurn')?.addEventListener('click', toggleTurnRecording);
+  $('#recordTurn')?.addEventListener('click', () => toggleTurnRecording(false));
+  $('#voiceModeToggle')?.addEventListener('click', toggleVoiceMode);
   $('#newScene')?.addEventListener('click', resetWorldComposer);
   $('#resumeScene')?.addEventListener('click', resumeCompletedScene);
   $('#closeEvidence')?.addEventListener('click', () => $('#evidenceDrawer').close());

@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     databricks_catalog: str = Field(default="workspace", alias="DATABRICKS_CATALOG")
     databricks_schema: str = Field(default="emotionos_worlds", alias="DATABRICKS_SCHEMA")
     databricks_timeout_seconds: int = Field(default=90, alias="DATABRICKS_TIMEOUT_SECONDS")
+    llm_temperature: float = Field(default=0.2, alias="LLM_TEMPERATURE")
     mlflow_experiment_id: str = Field(default="", alias="MLFLOW_EXPERIMENT_ID")
 
     audio_data_dir: str = Field(default="./data/emotionos_audio", alias="AUDIO_DATA_DIR")

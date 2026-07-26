@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import uuid
 from typing import Any, Protocol
@@ -11,6 +12,8 @@ import httpx
 
 from emotionos.app.core.config import Settings
 from emotionos.app.core.exceptions import ExternalProviderError, ProviderConfigurationError
+
+logger = logging.getLogger(__name__)
 
 
 class SceneRetriever(Protocol):
@@ -125,7 +128,13 @@ class DatabricksAISearchRetriever:
 
         for start in range(0, len(records), 20):
             await self._merge_records(records[start : start + 20])
-        await self._sync_index()
+        try:
+            await self._sync_index()
+        except ExternalProviderError as exc:
+            logger.warning(
+                "Databricks AI Search sync deferred after durable memory write: %s",
+                exc.details,
+            )
 
     async def _sync_index(self) -> None:
         from databricks.sdk import WorkspaceClient
@@ -134,6 +143,8 @@ class DatabricksAISearchRetriever:
         headers = dict(workspace.config.authenticate())
         headers["Content-Type"] = "application/json"
         host = (self.settings.databricks_host or workspace.config.host or "").rstrip("/")
+        if host and "://" not in host:
+            host = f"https://{host}"
         index_name = quote(self.settings.databricks_ai_search_index.strip(), safe="")
         try:
             async with httpx.AsyncClient(timeout=self.settings.databricks_timeout_seconds) as client:
@@ -161,6 +172,8 @@ class DatabricksAISearchRetriever:
             workspace = WorkspaceClient()
             headers = dict(workspace.config.authenticate())
             host = (self.settings.databricks_host or workspace.config.host or "").rstrip("/")
+            if host and "://" not in host:
+                host = f"https://{host}"
         except Exception as exc:
             raise ProviderConfigurationError(
                 "Databricks authentication failed while indexing scene memory.",
@@ -181,20 +194,21 @@ class DatabricksAISearchRetriever:
             ("importance", "INT"),
             ("visibility", "STRING"),
         ]
-        value_rows: list[str] = []
+        select_rows: list[str] = []
         parameters: list[dict[str, Any]] = []
         for row_index, record in enumerate(records):
-            markers: list[str] = []
+            selectors: list[str] = []
             for column, sql_type in column_types:
                 name = f"{column}_{row_index}"
-                markers.append(f":{name}")
+                selector = f":{name} AS {column}" if row_index == 0 else f":{name}"
+                selectors.append(selector)
                 value = record.get(column)
                 parameters.append({
                     "name": name,
                     "value": None if value is None else str(value),
                     "type": sql_type,
                 })
-            value_rows.append(f"({', '.join(markers)})")
+            select_rows.append(f"SELECT {', '.join(selectors)}")
 
         table = (
             f"{self.settings.databricks_catalog}.{self.settings.databricks_schema}.scene_memory_search"
@@ -206,8 +220,8 @@ class DatabricksAISearchRetriever:
             if column != "record_id"
         )
         statement = (
-            f"MERGE INTO {table} AS target USING (VALUES {', '.join(value_rows)}) "
-            f"AS incoming ({columns}) ON target.record_id = incoming.record_id "
+            f"MERGE INTO {table} AS target USING ({' UNION ALL '.join(select_rows)}) AS incoming "
+            f"ON target.record_id = incoming.record_id "
             f"WHEN MATCHED THEN UPDATE SET {updates}, target.updated_at = current_timestamp() "
             f"WHEN NOT MATCHED THEN INSERT ({columns}, updated_at) "
             f"VALUES ({', '.join(f'incoming.{column}' for column, _ in column_types)}, current_timestamp())"
@@ -276,6 +290,8 @@ class DatabricksAISearchRetriever:
             workspace = WorkspaceClient()
             headers = dict(workspace.config.authenticate())
             host = (self.settings.databricks_host or workspace.config.host or "").rstrip("/")
+            if host and "://" not in host:
+                host = f"https://{host}"
         except Exception as exc:
             raise ProviderConfigurationError(
                 "Databricks authentication failed while opening scene memory.",

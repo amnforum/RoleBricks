@@ -47,6 +47,8 @@ class DatabricksFoundationModelClient:
             workspace = WorkspaceClient()
             headers = dict(workspace.config.authenticate())
             host = (self.settings.databricks_host or workspace.config.host or "").rstrip("/")
+            if host and "://" not in host:
+                host = f"https://{host}"
         except Exception as exc:
             raise ProviderConfigurationError(
                 "Databricks authentication failed. Log in with the Databricks CLI or configure app OAuth.",
