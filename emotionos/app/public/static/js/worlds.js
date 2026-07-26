@@ -14,6 +14,7 @@ const worldState = {
   autoListenTimer: null,
   recognition: null,
   sceneRecognition: null,
+  sceneDictationTimer: null,
   speechVoiceBySpeaker: {},
   voiceInputTimer: null,
   suppressRecognitionEndSubmit: false,
@@ -25,6 +26,7 @@ const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
 const featuredSceneIds = ['a4d3a306-7624-458d-b8dd-4ec1ad70a281'];
 const voiceSilenceMs = 1300;
 const voiceFastSilenceMs = 760;
+const sceneDictationSilenceMs = 2200;
 const voiceNoiseTokens = new Set(['h', 'hi', 'hii', 'hiii', 'hello', 'uh', 'um', 'umm', 'mmm', 'a', 'aa', 'aaa']);
 
 const worldViews = {
@@ -908,6 +910,53 @@ function setSceneDictationUi(recording) {
   refreshIcons();
 }
 
+function normalizeSceneTranscript(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0900-\u097f\s']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function transcriptSimilarity(left, right) {
+  const leftTokens = new Set(normalizeSceneTranscript(left).split(' ').filter(Boolean));
+  const rightTokens = new Set(normalizeSceneTranscript(right).split(' ').filter(Boolean));
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  let overlap = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) overlap += 1;
+  }
+  return overlap / Math.max(leftTokens.size, rightTokens.size);
+}
+
+function isUsefulSceneTranscript(text) {
+  const tokens = normalizeSceneTranscript(text).split(' ').filter(Boolean);
+  const useful = tokens.filter((token) => !voiceNoiseTokens.has(token) && token.length > 1);
+  return useful.length >= 3 || useful.join('').length >= 16;
+}
+
+function renderSceneDictation(prompt, baseText, finalSegments, interim = '') {
+  const cleanInterim = isUsefulSceneTranscript(interim) ? interim : '';
+  prompt.value = [baseText, ...finalSegments, cleanInterim]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  updatePromptCount();
+}
+
+function stopSceneDictation() {
+  if (worldState.sceneDictationTimer) {
+    window.clearTimeout(worldState.sceneDictationTimer);
+    worldState.sceneDictationTimer = null;
+  }
+  if (!worldState.sceneRecognition) return;
+  const recognition = worldState.sceneRecognition;
+  worldState.sceneRecognition = null;
+  try { recognition.stop(); } catch (_) {}
+  setSceneDictationUi(false);
+}
+
 function startSceneDictation() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
@@ -915,10 +964,7 @@ function startSceneDictation() {
     return;
   }
   if (worldState.sceneRecognition) {
-    const recognition = worldState.sceneRecognition;
-    worldState.sceneRecognition = null;
-    recognition.stop();
-    setSceneDictationUi(false);
+    stopSceneDictation();
     return;
   }
   const recognition = new Recognition();
@@ -928,27 +974,63 @@ function startSceneDictation() {
   recognition.continuous = true;
   const prompt = $('#scenePrompt');
   const baseText = prompt.value.trim();
-  let finalText = '';
+  const finalSegments = [];
+  const seenSegments = new Set();
+
+  const appendFinalSegment = (transcript) => {
+    const segment = String(transcript || '').replace(/\s+/g, ' ').trim();
+    const normalized = normalizeSceneTranscript(segment);
+    if (!normalized || seenSegments.has(normalized) || !isUsefulSceneTranscript(segment)) return;
+    const recentSegments = finalSegments.slice(-6);
+    const repeated = recentSegments.some((existing) => {
+      const existingNormalized = normalizeSceneTranscript(existing);
+      if (existingNormalized === normalized) return true;
+      if (normalized.length > 30 && existingNormalized.includes(normalized)) return true;
+      if (existingNormalized.length > 30 && normalized.includes(existingNormalized)) return true;
+      return transcriptSimilarity(existing, segment) >= 0.86;
+    });
+    if (repeated) return;
+    seenSegments.add(normalized);
+    finalSegments.push(segment);
+  };
+
+  const resetSilenceTimer = () => {
+    if (worldState.sceneDictationTimer) window.clearTimeout(worldState.sceneDictationTimer);
+    worldState.sceneDictationTimer = window.setTimeout(() => {
+      toast('Voice captured. Tap mic again to add more.');
+      stopSceneDictation();
+    }, sceneDictationSilenceMs);
+  };
+
   setSceneDictationUi(true);
+  resetSilenceTimer();
   recognition.onresult = (event) => {
     let interim = '';
-    for (const result of event.results) {
-      if (result.isFinal) finalText += result[0].transcript + ' ';
-      else interim += result[0].transcript;
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index];
+      const transcript = result[0]?.transcript || '';
+      if (result.isFinal) appendFinalSegment(transcript);
+      else interim = transcript;
     }
-    prompt.value = [baseText, finalText, interim].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-    updatePromptCount();
+    renderSceneDictation(prompt, baseText, finalSegments, interim);
+    resetSilenceTimer();
   };
-  recognition.onerror = () => toast('I could not hear that clearly.');
+  recognition.onerror = (event) => {
+    if (event.error !== 'no-speech') toast('I could not hear that clearly.');
+    stopSceneDictation();
+  };
   recognition.onend = () => {
+    if (worldState.sceneDictationTimer) {
+      window.clearTimeout(worldState.sceneDictationTimer);
+      worldState.sceneDictationTimer = null;
+    }
     worldState.sceneRecognition = null;
+    renderSceneDictation(prompt, baseText, finalSegments);
     setSceneDictationUi(false);
-    updatePromptCount();
     prompt.focus();
   };
   recognition.start();
 }
-
 function normalizedVoiceTokens(text) {
   return String(text || '')
     .toLowerCase()
