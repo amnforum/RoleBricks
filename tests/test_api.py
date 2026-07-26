@@ -27,6 +27,10 @@ def test_root_renders_the_open_ended_scene_workflow(client):
     assert "Step into any situation" in response.text
     assert "Build this scene" in response.text
     assert "Choose up to three characters" in response.text
+    assert "RoleBricks" in response.text
+    assert "/static/images/rolebricks-logo.webp" in response.text
+    assert "/static/images/rolebricks-favicon.png" in response.text
+    assert "Living character engine" not in response.text
     assert "Voice lab" not in response.text
 
 

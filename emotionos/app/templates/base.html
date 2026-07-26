@@ -3,22 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111111">
-  <link rel="icon" href="data:,">
-  <title>{% block title %}EmotionOS{% endblock %}</title>
-  <link rel="stylesheet" href="/static/css/app.css?v=living-scenes-1">
+  <meta name="theme-color" content="#060a12">
+  <link rel="icon" type="image/png" sizes="256x256" href="/static/images/rolebricks-favicon.png">
+  <link rel="apple-touch-icon" href="/static/images/rolebricks-favicon.png">
+  <title>{% block title %}RoleBricks{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css?v=rolebricks-1">
   {% block styles %}{% endblock %}
 </head>
 <body data-page="{% block page_id %}base{% endblock %}">
+  <div class="ambient-audio-wave" aria-hidden="true">
+    <i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i>
+    <i></i><i></i><i></i><i></i><i></i>
+  </div>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="EmotionOS living scenes">
-      <span class="brand-mark" aria-hidden="true">
-        <i></i><i></i><i></i><i></i><i></i>
-      </span>
-      <span class="brand-copy">
-        <strong>EmotionOS</strong>
-        <small>Living character engine</small>
-      </span>
+    <a class="brand" href="/" aria-label="RoleBricks home">
+      <img class="brand-logo" src="/static/images/rolebricks-logo.webp" alt="RoleBricks">
     </a>
     <div class="header-meta">
       <span class="engine-state" id="providerStatus">
@@ -31,7 +33,7 @@
     {% block content %}{% endblock %}
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="/static/js/app.js?v=living-scenes-1"></script>
+  <script src="/static/js/app.js?v=rolebricks-1"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

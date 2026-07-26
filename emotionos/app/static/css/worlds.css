@@ -1,13 +1,11 @@
 body[data-page="worlds"] {
   min-height: 100vh;
-  background-color: #050505;
-  background-position: center 68px;
-  background-size: max(1500px, 100vw) auto;
+  background-color: var(--page);
 }
 
 body[data-page="worlds"] .page-shell {
   width: min(1180px, calc(100% - 36px));
-  min-height: calc(100vh - 68px);
+  min-height: calc(100vh - 76px);
   padding: 24px 0 54px;
 }
 
@@ -50,7 +48,7 @@ body[data-page="worlds"] textarea {
 body[data-page="worlds"] input:focus,
 body[data-page="worlds"] textarea:focus,
 body[data-page="worlds"] select:focus {
-  border-color: #ef174c;
+  border-color: var(--accent);
 }
 
 body[data-page="worlds"] label,
@@ -93,7 +91,7 @@ body[data-page="worlds"] label > select {
 }
 
 .scene-progress span.is-active {
-  border-bottom-color: #ef174c;
+  border-bottom-color: var(--accent);
   color: #f4f4f4;
 }
 
@@ -138,7 +136,7 @@ body[data-page="worlds"] label > select {
   position: absolute;
   top: 0;
   right: 44px;
-  background: #ef174c;
+  background: var(--accent);
   opacity: 0.75;
 }
 
@@ -160,7 +158,7 @@ body[data-page="worlds"] label > select {
 
 .world-eyebrow {
   margin: 0 0 8px;
-  color: #ef174c;
+  color: var(--accent);
   font-size: 0.72rem;
   text-transform: uppercase;
 }
@@ -345,7 +343,7 @@ body[data-page="worlds"] label > select {
   width: 28px;
   flex: 0 0 28px;
   padding-top: 2px;
-  color: #ef174c;
+  color: var(--accent);
   font-family: Consolas, monospace;
   font-size: 0.72rem;
 }
@@ -421,7 +419,7 @@ body[data-page="worlds"] label > select {
 }
 
 .pressure-control input:checked + span {
-  border-color: #ef174c;
+  border-color: var(--accent);
   color: #ffffff;
 }
 
@@ -448,7 +446,7 @@ body[data-page="worlds"] label > select {
 }
 
 .cast-row.is-selected {
-  border-left: 2px solid #ef174c;
+  border-left: 2px solid var(--accent);
 }
 
 .cast-row-head {
@@ -473,7 +471,7 @@ body[data-page="worlds"] label > select {
   height: 18px;
   min-height: 18px;
   margin: 0;
-  accent-color: #ef174c;
+  accent-color: var(--accent);
 }
 
 .cast-row-head input[type="text"] {
@@ -589,7 +587,7 @@ body[data-page="worlds"] label > select {
   width: 0;
   height: 100%;
   display: block;
-  background: #ef174c;
+  background: var(--accent);
   transition: width 300ms ease;
 }
 
@@ -616,7 +614,7 @@ body[data-page="worlds"] label > select {
 }
 
 .pipeline-stages li.is-active {
-  border-left-color: #ef174c;
+  border-left-color: var(--accent);
   color: #ffffff;
   background: #0c0c0c;
 }
@@ -669,7 +667,7 @@ body[data-page="worlds"] label > select {
 .character-index {
   display: block;
   margin-bottom: 34px;
-  color: #ef174c;
+  color: var(--accent);
   font-family: Consolas, monospace;
   font-size: 0.72rem;
 }
@@ -776,7 +774,7 @@ body[data-page="worlds"] label > select {
 }
 
 .live-cast-person.is-speaking {
-  border-left: 2px solid #ef174c;
+  border-left: 2px solid var(--accent);
   background: #111111;
 }
 
@@ -828,7 +826,7 @@ body[data-page="worlds"] label > select {
 }
 
 .turn.is-agent .turn-meta strong {
-  color: #ef174c;
+  color: var(--accent);
 }
 
 .turn.is-user .turn-meta {
@@ -903,7 +901,7 @@ body[data-page="worlds"] label > select {
 }
 
 .voice-wave.is-recording i {
-  background: #ef174c;
+  background: var(--accent);
   animation: voice-level 720ms ease-in-out infinite alternate;
 }
 
@@ -927,8 +925,8 @@ body[data-page="worlds"] label > select {
 }
 
 .mic-button.is-recording {
-  border-color: #ef174c;
-  color: #ef174c;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .after-view {
@@ -1032,7 +1030,7 @@ body[data-page="worlds"] label > select {
 
 .evidence-item span {
   margin-bottom: 6px;
-  color: #ef174c;
+  color: var(--accent);
   font-size: 0.65rem;
   text-transform: uppercase;
 }
