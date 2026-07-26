@@ -18,7 +18,8 @@ const worldState = {
 };
 
 const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
-const voiceSilenceMs = 1850;
+const voiceSilenceMs = 2300;
+const voiceNoiseTokens = new Set(['h', 'hi', 'hii', 'hiii', 'hello', 'uh', 'um', 'umm', 'mmm', 'a', 'aa', 'aaa']);
 
 const worldViews = {
   describe: '#sceneStart',
@@ -928,6 +929,32 @@ function startSceneDictation() {
   recognition.start();
 }
 
+function normalizedVoiceTokens(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0900-\u097f\s']/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function isMeaningfulVoiceText(text) {
+  const tokens = normalizedVoiceTokens(text);
+  if (!tokens.length) return false;
+  const useful = tokens.filter((token) => !voiceNoiseTokens.has(token) && token.length > 1);
+  if (useful.length >= 2) return true;
+  if (useful.length === 1 && useful[0].length >= 5) return true;
+  return false;
+}
+
+function clearNoiseTurnText(finalText, interimText) {
+  if (isMeaningfulVoiceText(finalText)) return false;
+  const visible = [finalText, interimText].filter(Boolean).join(' ').trim();
+  if (visible && !isMeaningfulVoiceText(visible)) {
+    $('#turnText').value = '';
+    return true;
+  }
+  return false;
+}
 function startAutoVoiceTurn() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
@@ -945,27 +972,38 @@ function startAutoVoiceTurn() {
   let submitTimer = null;
   let shouldSubmit = false;
   setTurnRecordingUi('recording');
-  toast('Listening. Speak naturally; RoleBricks sends after a full pause.');
+  toast('Listening. Speak naturally; RoleBricks sends after a clear pause.');
   const queueSubmit = () => {
     window.clearTimeout(submitTimer);
     submitTimer = window.setTimeout(() => {
       if (!worldState.voiceMode || worldState.turnSubmitting) return;
-      const text = $('#turnText').value.trim();
-      if (!text) return;
+      const cleanFinal = finalText.replace(/\s+/g, ' ').trim();
+      if (!isMeaningfulVoiceText(cleanFinal)) {
+        clearNoiseTurnText(finalText, interimText);
+        return;
+      }
+      $('#turnText').value = cleanFinal;
       shouldSubmit = true;
       recognition.stop();
     }, voiceSilenceMs);
   };
   recognition.onresult = (event) => {
     interimText = '';
+    let heardFinal = false;
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
       const result = event.results[index];
-      if (result.isFinal) finalText += result[0].transcript + ' ';
-      else interimText += result[0].transcript;
+      const transcript = result[0].transcript || '';
+      if (result.isFinal) {
+        finalText += transcript + ' ';
+        heardFinal = true;
+      } else {
+        interimText += transcript;
+      }
     }
-    const text = [finalText, interimText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-    $('#turnText').value = text;
-    if (text) queueSubmit();
+    const visibleText = [finalText, interimText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    $('#turnText').value = visibleText;
+    if (heardFinal && isMeaningfulVoiceText(finalText)) queueSubmit();
+    else if (heardFinal) clearNoiseTurnText(finalText, interimText);
   };
   recognition.onerror = () => {
     window.clearTimeout(submitTimer);
@@ -978,8 +1016,11 @@ function startAutoVoiceTurn() {
     worldState.recognition = null;
     const text = $('#turnText').value.trim();
     setTurnRecordingUi('idle');
-    if (worldState.voiceMode && text && !worldState.turnSubmitting && shouldSubmit) $('#turnForm').requestSubmit();
-    else if (worldState.voiceMode) scheduleAutoListen();
+    if (worldState.voiceMode && text && !worldState.turnSubmitting && shouldSubmit && isMeaningfulVoiceText(text)) $('#turnForm').requestSubmit();
+    else {
+      if (!isMeaningfulVoiceText(text)) $('#turnText').value = '';
+      if (worldState.voiceMode) scheduleAutoListen();
+    }
   };
   recognition.start();
 }
