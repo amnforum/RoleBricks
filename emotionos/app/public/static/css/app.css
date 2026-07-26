@@ -39,9 +39,10 @@ body {
   top: 86px;
   right: -120px;
   z-index: 0;
-  opacity: 0.42;
+  opacity: 0.72;
   pointer-events: none;
-  filter: drop-shadow(0 0 18px rgba(255, 106, 0, 0.34)) drop-shadow(0 0 26px rgba(138, 79, 227, 0.22));
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 24px rgba(255, 106, 0, 0.62)) drop-shadow(0 0 38px rgba(138, 79, 227, 0.42)) drop-shadow(0 0 52px rgba(52, 120, 229, 0.24));
   animation: ambient-drift 12s ease-in-out infinite alternate;
 }
 
@@ -57,14 +58,14 @@ body {
 }
 
 .ambient-audio-wave::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 520 180'%3E%3Cpath d='M0 90 C32 18 64 18 96 90 S160 162 192 90 S256 18 288 90 S352 162 384 90 S448 18 520 90' fill='none' stroke='%23ff6a00' stroke-width='3.2' stroke-linecap='round'/%3E%3Cpath d='M0 90 C26 58 52 58 78 90 S130 122 156 90 S208 58 234 90 S286 122 312 90 S364 58 390 90 S468 122 520 90' fill='none' stroke='%238a4fe3' stroke-width='2' stroke-linecap='round' opacity='.82'/%3E%3C/svg%3E");
-  animation: wave-slide 9s linear infinite;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 520 180'%3E%3Cpath d='M0 90 C32 18 64 18 96 90 S160 162 192 90 S256 18 288 90 S352 162 384 90 S448 18 520 90' fill='none' stroke='%23ff8a1c' stroke-width='4.4' stroke-linecap='round'/%3E%3Cpath d='M0 90 C26 58 52 58 78 90 S130 122 156 90 S208 58 234 90 S286 122 312 90 S364 58 390 90 S468 122 520 90' fill='none' stroke='%23a066ff' stroke-width='3' stroke-linecap='round' opacity='.82'/%3E%3C/svg%3E");
+  animation: wave-slide 7s linear infinite;
 }
 
 .ambient-audio-wave::after {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 520 180'%3E%3Cpath d='M0 102 C44 44 66 44 110 102 S198 160 242 102 S330 44 374 102 S462 160 520 102' fill='none' stroke='%233478e5' stroke-width='2.4' stroke-linecap='round' opacity='.7'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 520 180'%3E%3Cpath d='M0 102 C44 44 66 44 110 102 S198 160 242 102 S330 44 374 102 S462 160 520 102' fill='none' stroke='%23469aff' stroke-width='3.4' stroke-linecap='round' opacity='.7'/%3E%3C/svg%3E");
   transform: translateY(18px);
-  animation: wave-slide 13s linear infinite reverse;
+  animation: wave-slide 10s linear infinite reverse;
 }
 
 .ambient-audio-wave i { display: none; }

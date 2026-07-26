@@ -18,6 +18,7 @@ const worldState = {
 };
 
 const recentSceneStorageKey = 'rolebricks.recent-scenes.v1';
+const featuredSceneIds = ['a4d3a306-7624-458d-b8dd-4ec1ad70a281'];
 const voiceSilenceMs = 2300;
 const voiceNoiseTokens = new Set(['h', 'hi', 'hii', 'hiii', 'hello', 'uh', 'um', 'umm', 'mmm', 'a', 'aa', 'aaa']);
 
@@ -183,14 +184,15 @@ async function loadRecentScenes() {
   const container = $('#recentScenes');
   const list = $('#recentSceneList');
   if (!container || !list) return;
-  const ids = recentSceneIds();
+  const ids = [...featuredSceneIds, ...recentSceneIds().filter((sceneId) => !featuredSceneIds.includes(sceneId))];
   if (!ids.length) return;
 
   const scenes = (await Promise.all(ids.map(async (sceneId) => {
     try {
-      return await api(`/api/worlds/${sceneId}`);
+      const scene = await api(`/api/worlds/${sceneId}`);
+      return { scene, featured: featuredSceneIds.includes(sceneId) };
     } catch (_) {
-      forgetScene(sceneId);
+      if (!featuredSceneIds.includes(sceneId)) forgetScene(sceneId);
       return null;
     }
   }))).filter(Boolean);
@@ -199,14 +201,14 @@ async function loadRecentScenes() {
     container.classList.add('is-hidden');
     return;
   }
-  list.innerHTML = scenes.map((scene) => `
-    <article class="recent-scene" data-scene-card="${scene.id}">
+  list.innerHTML = scenes.map(({ scene, featured }) => `
+    <article class="recent-scene${featured ? ' is-featured' : ''}" data-scene-card="${scene.id}">
       <button class="recent-scene-main" type="button" data-load-scene="${scene.id}" aria-label="Open ${escapeHtml(scene.manifest.title)}">
         <strong>${escapeHtml(scene.manifest.title)}</strong>
-        <span>${escapeHtml(scene.status.replace('_', ' '))}</span>
+        <span>${featured ? 'Featured demo' : escapeHtml(scene.status.replace('_', ' '))}</span>
       </button>
       <button class="recent-scene-action" type="button" data-load-scene="${scene.id}">Open</button>
-      <button class="recent-scene-action danger-action" type="button" data-delete-recent-scene="${scene.id}">Delete</button>
+      ${featured ? '' : `<button class="recent-scene-action danger-action" type="button" data-delete-recent-scene="${scene.id}">Delete</button>`}
     </article>
   `).join('');
   container.classList.remove('is-hidden');
@@ -734,6 +736,9 @@ async function togglePauseScene() {
 }
 
 async function completeWorldScene() {
+  if (!worldState.scene) return;
+  const button = $('#completeScene');
+  button.disabled = true;
   worldState.voiceMode = false;
   updateVoiceModeUi();
   clearAutoListen();
@@ -742,8 +747,15 @@ async function completeWorldScene() {
     worldState.scene = scene;
     stopWorldAudio();
     renderAfter(scene);
+    toast('Scene saved.');
   } catch (error) {
-    toast(error.message);
+    const localScene = { ...worldState.scene, status: 'completed' };
+    worldState.scene = localScene;
+    stopWorldAudio();
+    renderAfter(localScene);
+    toast(`Scene closed locally. Server memory sync: ${error.message}`);
+  } finally {
+    button.disabled = false;
   }
 }
 

@@ -659,15 +659,27 @@ class SceneWorldService:
                 "importance": 75,
                 "visibility": "private",
             })
+        scene.status = "completed"
+        scene.preparation = {
+            **dict(scene.preparation or {}),
+            "message": "Scene completed. Memory reflection saved.",
+        }
+        db.commit()
         with self.telemetry.span(
             "scene.complete_memory",
             span_type="MEMORY",
             inputs={"scene_id": str(scene.id), "record_count": len(index_records)},
         ) as span:
-            await self.retriever.index(index_records)
-            span.set_outputs({"indexed_records": len(index_records)})
-        scene.status = "completed"
-        db.commit()
+            try:
+                await self.retriever.index(index_records)
+                span.set_outputs({"indexed_records": len(index_records), "status": "indexed"})
+            except Exception as exc:
+                scene.preparation = {
+                    **dict(scene.preparation or {}),
+                    "memory_index_warning": str(exc),
+                }
+                db.commit()
+                span.set_outputs({"indexed_records": 0, "status": "deferred", "error": str(exc)})
         return self.read_scene(db, scene.id)
 
     async def add_turn(

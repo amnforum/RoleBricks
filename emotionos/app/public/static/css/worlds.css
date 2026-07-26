@@ -314,6 +314,21 @@ body[data-page="worlds"] label > select {
   font-size: 0.68rem;
   text-transform: capitalize;
 }
+.recent-scene.is-featured {
+  border-color: rgba(255, 106, 0, 0.72);
+  background:
+    linear-gradient(135deg, rgba(255, 106, 0, 0.16), rgba(138, 79, 227, 0.11)),
+    rgba(12, 13, 16, 0.82);
+  box-shadow: 0 0 22px rgba(255, 106, 0, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+}
+
+.recent-scene.is-featured strong {
+  color: #ffffff;
+}
+
+.recent-scene.is-featured span {
+  color: #ff9a3d;
+}
 
 .view-heading {
   min-height: 142px;
