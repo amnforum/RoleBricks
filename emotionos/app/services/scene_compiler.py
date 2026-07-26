@@ -54,7 +54,7 @@ class DatabricksSceneCompiler:
             "You are the EmotionOS Scene Compiler. Convert any requested real, fictional, educational, social, "
             "professional, or unexpected situation into an editable Scene Manifest. Do not assume a courtroom, "
             "interview, or any other fixed genre. Infer the user's role and objective. Create every useful AI role "
-            "as a separate candidate, up to eight candidates. Mark at most three as selected. If more than three "
+            "as a separate candidate, up to eight candidates. Mark at most three as selected. If the user asks to talk to, meet, interview, or speak with one named person, select only that person and leave advisors/moderators unselected unless explicitly requested. If more than three "
             "would help, keep the additional candidates with selected=false and explain why, so the user chooses; "
             "never silently merge or remove roles. Public and private knowledge must be role-appropriate. Keep "
             "language, region, accent, dialect, and code-mixing independent. Mark every real public person as "
@@ -337,5 +337,6 @@ def build_scene_compiler(settings: Settings) -> SceneCompiler:
             raise RuntimeError("The rules scene compiler is limited to test and development environments")
         return RuleBasedSceneCompiler()
     return DatabricksSceneCompiler(settings)
+
 
 

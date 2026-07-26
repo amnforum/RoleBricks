@@ -169,6 +169,15 @@ def test_stale_blueprint_version_is_rejected(client):
     assert response.json()["details"]["current_version"] == 1
 
 
+
+def test_one_on_one_prompt_selects_only_named_counterpart(client):
+    response = client.post(
+        "/api/worlds/draft",
+        json={"prompt": "I want to talk to the Prime Minister tomorrow about a policy interview.", "locale": "en-IN"},
+    )
+    assert response.status_code == 201, response.text
+    selected = [item for item in response.json()["manifest"]["ai_characters"] if item["selected"]]
+    assert len(selected) == 1
 def test_public_figure_scene_is_labelled_and_forces_an_original_voice(client):
     response = client.post(
         "/api/worlds/draft",
@@ -253,4 +262,5 @@ def test_scene_management_actions_keep_or_remove_the_right_records(client):
     assert deleted.status_code == 204, deleted.text
     missing = client.get(f"/api/worlds/{scene_id}")
     assert missing.status_code == 404
+
 

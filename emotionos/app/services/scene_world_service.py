@@ -92,6 +92,7 @@ class SceneWorldService:
             inputs={"locale": payload.locale, "prompt_characters": len(payload.prompt)},
         ) as span:
             manifest, usage = await self.compiler.compile(payload.prompt, locale=payload.locale)
+            manifest = self._normalize_cast_for_prompt(payload.prompt, manifest)
             span.set_outputs({"cast_candidates": len(manifest.ai_characters), "usage": usage})
         if len(manifest.selected_characters) > self.settings.scene_max_agents:
             raise ValidationError(f"The compiled scene selected more than {self.settings.scene_max_agents} AI respondents")
@@ -945,6 +946,29 @@ class SceneWorldService:
         return self.read_scene(db, scene.id)
 
     @staticmethod
+    def _normalize_cast_for_prompt(prompt: str, manifest: SceneManifest) -> SceneManifest:
+        one_on_one = re.search(
+            r"\b(talk to|speak to|chat with|talk with|meet with|interview|conversation with)\b",
+            prompt,
+            re.IGNORECASE,
+        )
+        multi_role = re.search(
+            r"\b(advisor|judge|panel|jury|team|group|multiple|two|three|opposition|moderator|assistant|with .* and )\b",
+            prompt,
+            re.IGNORECASE,
+        )
+        selected = manifest.selected_characters
+        if not one_on_one or multi_role or len(selected) <= 1:
+            return manifest
+        primary = next((item for item in selected if item.identity_kind == "public_figure"), selected[0])
+        for character in manifest.ai_characters:
+            character.selected = character.key == primary.key
+            if character.key != primary.key and not character.selection_reason:
+                character.selection_reason = "Available as an optional extra; not selected for this one-on-one scene."
+        manifest.assumptions.append("One-on-one request detected, so only the named counterpart is selected by default.")
+        return manifest
+
+    @staticmethod
     def _validate_scene_prompt(prompt: str) -> None:
         words = re.findall(r"[A-Za-z\u0900-\u097F0-9']+", prompt)
         unique_words = {word.casefold() for word in words if len(word) > 2}
@@ -1678,6 +1702,7 @@ class SceneWorldService:
             accent=accent,
             style="conversational",
         )
+
 
 
 

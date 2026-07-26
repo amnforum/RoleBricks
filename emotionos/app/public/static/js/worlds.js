@@ -706,6 +706,7 @@ async function submitWorldTurn(event) {
     setWorldBusy(button, false);
     if (worldState.recorder?.state !== 'recording') setTurnRecordingUi('idle');
     refreshIcons();
+    if (worldState.voiceMode && !worldState.audio && !worldState.turnSubmitting) scheduleAutoListen();
   }
 }
 
@@ -796,17 +797,24 @@ function speakWorldText(text, speakerKey = '') {
   utterance.pitch = 1;
   worldState.audio = { pause: () => speechSynthesis.cancel(), currentTime: 0 };
   if (speakerKey) {
-    $('[data-live-agent]').forEach((element) => {
+    $$('[data-live-agent]').forEach((element) => {
       element.classList.toggle('is-speaking', element.dataset.liveAgent === speakerKey);
     });
   }
   utterance.onend = utterance.onerror = () => {
     worldState.audio = null;
-    $('[data-live-agent]').forEach((element) => element.classList.remove('is-speaking'));
+    $$('[data-live-agent]').forEach((element) => element.classList.remove('is-speaking'));
     scheduleAutoListen();
   };
   speechSynthesis.cancel();
   speechSynthesis.speak(utterance);
+  window.setTimeout(() => {
+    if (worldState.voiceMode && worldState.audio) {
+      worldState.audio = null;
+      $$('[data-live-agent]').forEach((element) => element.classList.remove('is-speaking'));
+      scheduleAutoListen();
+    }
+  }, Math.max(1800, text.length * 62));
 }
 
 function playWorldAudio(url, speakerKey = '') {
@@ -1140,5 +1148,9 @@ if (page === 'worlds') {
     setWorldView('describe');
   });
 }
+
+
+
+
 
 
