@@ -1,4 +1,4 @@
-﻿.venv/
+.venv/
 __pycache__/
 .pytest_cache/
 .mypy_cache/
@@ -11,3 +11,7 @@ data/
 *.sqlite
 *.db
 .databricks/
+
+.vercel
+.env*
+!.env.example
