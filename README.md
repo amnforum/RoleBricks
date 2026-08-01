@@ -109,11 +109,16 @@ The production voice router selects exactly one provider before synthesis. It do
 
 ## Verification
 
+Run the following commands to verify that the project is configured correctly after setup:
+
 ```powershell
 .\.venv\Scripts\python.exe -m compileall -q emotionos migrations tests
 node --check emotionos\app\public\static\js\worlds.js
 npm run test:gateway
 .\.venv\Scripts\python.exe -m pytest -q
+```
+
+The acceptance suite covers unseen scenarios, approval-before-spend, the three-character cap, version conflicts and reverts, preparation recovery, voice samples, scene turns, durable memory, and playable audio.
 ```
 
 The acceptance suite covers unseen scenarios, approval-before-spend, the three-character cap, version conflicts and reverts, preparation recovery, voice samples, scene turns, durable memory, and playable audio.
